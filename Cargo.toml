@@ -1,7 +1,15 @@
 [package]
 name = "ncw"
+description = "Native Instruments NCW audio file format support"
 version = "0.0.1"
 edition = "2021"
+authors = ["monomadic <themonomadic@protonmail.com>"]
+readme = "README.md"
+homepage = "https://github.com/monomadic/ncw"
+repository = "https://github.com/monomadic/ncw"
+license = "MIT OR Apache-2.0"
+keywords = ["audio", "decompression", "kontakt", "file-formats"]
+categories = ["command-line-utilities", "encoding", "multimedia::encoding", "multimedia::audio", "compression"]
 
 [dependencies]
 
