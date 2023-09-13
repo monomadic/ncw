@@ -11,7 +11,7 @@ use ncw::NcwReader;
 pub fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
-        println!("usage: ncw-decode <INPUT> <OUTPUT>");
+        println!("usage: ncw-convert <INPUT> <OUTPUT>");
         return Ok(());
     }
 
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn test_read_16bit_mono() -> Result<(), Box<dyn Error>> {
-        let mut file = File::open("test-data/NCW/16-bit.ncw")?;
+        let file = File::open("test-data/NCW/16-bit.ncw")?;
         let mut ncw = NcwReader::read(file)?;
         let mut buffer = Cursor::new(Vec::new());
         write_wav(&mut ncw, &mut buffer)?;
@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn test_read_24bit_stereo() -> Result<(), Box<dyn Error>> {
-        let mut file = File::open("test-data/NCW/24-bit.ncw")?;
+        let file = File::open("test-data/NCW/24-bit.ncw")?;
         let mut ncw = NcwReader::read(file)?;
         let mut buffer = Cursor::new(Vec::new());
         write_wav(&mut ncw, &mut buffer)?;
