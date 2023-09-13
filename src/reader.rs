@@ -68,30 +68,34 @@ impl<R: Read + Seek> NcwReader<R> {
                 unimplemented!("mid/side compression not implemented yet!");
             }
 
-            let bits = block_header.bits.abs() as usize;
+            let bits = block_header.bits.unsigned_abs() as usize;
             let block_data_len = bits * 64;
             let mut block_data = vec![0; block_data_len];
             self.reader.read_exact(&mut block_data).unwrap();
 
-            if block_header.bits > 0 {
-                // Delta decode, block_data represents the delta from base_value
-                samples.append(&mut decode_delta_block_i32(
-                    block_header.base_value,
-                    &block_data,
-                    bits,
-                ));
-            } else if block_header.bits < 0 {
-                // Bit truncation (simple compression)
-                let bits = block_header.bits.abs() as usize;
-                samples.append(&mut decode_truncated_block_i32(&block_data, bits));
-            } else {
-                // No compression
-                let bytes_per_sample = self.header.bits_per_sample as usize / 8;
+            match block_header.bits.cmp(&0) {
+                std::cmp::Ordering::Greater => {
+                    // Delta decode, block_data represents the delta from base_value
+                    samples.append(&mut decode_delta_block_i32(
+                        block_header.base_value,
+                        &block_data,
+                        bits,
+                    ));
+                }
+                std::cmp::Ordering::Less => {
+                    // Bit truncation (simple compression)
+                    let bits = block_header.bits.unsigned_abs() as usize;
+                    samples.append(&mut decode_truncated_block_i32(&block_data, bits));
+                }
+                std::cmp::Ordering::Equal => {
+                    // No compression
+                    let bytes_per_sample = self.header.bits_per_sample as usize / 8;
 
-                for _ in 0..512 {
-                    let sample_bytes = self.reader.read_bytes(bytes_per_sample).unwrap();
-                    let sample = i32::from_le_bytes(sample_bytes.try_into().unwrap());
-                    samples.push(sample);
+                    for _ in 0..512 {
+                        let sample_bytes = self.reader.read_bytes(bytes_per_sample).unwrap();
+                        let sample = i32::from_le_bytes(sample_bytes.try_into().unwrap());
+                        samples.push(sample);
+                    }
                 }
             }
         }
@@ -108,7 +112,7 @@ fn decode_delta_block_i32(base_sample: i32, deltas: &[u8], bits: usize) -> Vec<i
 
     for (i, delta) in delta_values.iter().enumerate() {
         samples[i] = prev_base;
-        prev_base = prev_base + delta;
+        prev_base += delta;
     }
 
     samples
@@ -124,7 +128,7 @@ fn decode_truncated_block_i32(data: &[u8], bit_size: usize) -> Vec<i32> {
 
         let mut temp: i32 = 0;
         for i in 0..((bit_size + 7) / 8) {
-            temp |= (data[byte_offset as usize + i as usize] as i32) << (i * 8);
+            temp |= (data[byte_offset + i] as i32) << (i * 8);
         }
         let value = (temp >> bit_remainder) & ((1 << bit_size) - 1);
         samples.push(value);

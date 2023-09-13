@@ -39,7 +39,7 @@ pub fn write_wav<R: Read + Seek, W: Write + Seek>(
     for sample in reader.decode_samples()? {
         match reader.header.bits_per_sample {
             32 | 24 => {
-                writer.write_sample(sample as i32)?;
+                writer.write_sample(sample)?;
             }
             16 => {
                 writer.write_sample(sample as i16)?;
