@@ -65,7 +65,7 @@ impl<R: Read + Seek> NcwReader<R> {
 
             let block_header = BlockHeader::read(&mut self.reader)?;
             if block_header.flags == 1 {
-                panic!("mid/side");
+                unimplemented!("mid/side compression not implemented yet!");
             }
 
             let bits = block_header.bits.abs() as usize;

@@ -1,0 +1,11 @@
+[package]
+name = "ncw-convert"
+description = "Native Instruments NCW audio file to wav convertor"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+hound = "3.5.0"
+ncw = { path = "../.." }

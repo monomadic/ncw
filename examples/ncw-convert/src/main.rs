@@ -8,7 +8,7 @@ use std::{
 use hound::{WavSpec, WavWriter};
 use ncw::NcwReader;
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
         println!("usage: ncw-decode <INPUT> <OUTPUT>");
@@ -61,7 +61,7 @@ mod tests {
     use std::{fs::File, io::Cursor};
 
     #[test]
-    fn test_read_16bit_mono() -> Result<(), Error> {
+    fn test_read_16bit_mono() -> Result<(), Box<dyn Error>> {
         let mut file = File::open("test-data/NCW/16-bit.ncw")?;
         let mut ncw = NcwReader::read(file)?;
         let mut buffer = Cursor::new(Vec::new());
@@ -70,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_24bit_stereo() -> Result<(), Error> {
+    fn test_read_24bit_stereo() -> Result<(), Box<dyn Error>> {
         let mut file = File::open("test-data/NCW/24-bit.ncw")?;
         let mut ncw = NcwReader::read(file)?;
         let mut buffer = Cursor::new(Vec::new());
