@@ -39,10 +39,10 @@ for sample in ncw.decode_samples()? {
 
 ## Utility (ncw-convert)
 
-To install the cli utility, install it from cargo:
+To install the cli utility, you can use cargo:
 
 ```bash
-cargo install ncw --package ncw-convert
+cargo install ncw-convert
 ```
 
 ### Usage
@@ -50,7 +50,7 @@ cargo install ncw --package ncw-convert
 Run the program with the following command-line arguments:
 
 ```bash
-ncw-decode <INPUT> <OUTPUT>
+ncw-convert <INPUT> <OUTPUT>
 ```
 
 - `<INPUT>`: Path to the input NCW file.

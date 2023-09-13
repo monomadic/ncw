@@ -8,4 +8,4 @@ repository.workspace = true
 
 [dependencies]
 hound = "3.5.0"
-ncw = { path = "../.." }
+ncw = "0.1.0"
