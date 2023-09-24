@@ -57,15 +57,12 @@ impl<R: Read + Seek> NcwReader<R> {
     pub fn read_block(&self, block_data: &Vec<u8>, block_header: &BlockHeader) -> Vec<i32> {
         match block_header.flags {
             0 => {}
-            1 => unimplemented!("mid/side compression not implemented yet!"),
-            2 => unimplemented!("type 2 compression not implemented yet!"),
+            1 => unimplemented!("mid/side encoding"),
+            2 => unimplemented!("32-bit float encoding"),
             _ => panic!("Unknown interleaving format"),
         }
 
         let bits = block_header.bits.unsigned_abs() as usize;
-        // let block_data_len = bits * 64;
-        // let mut block_data = vec![0; block_data_len];
-        // self.reader.read_exact(&mut block_data).unwrap();
 
         match block_header.bits.cmp(&0) {
             std::cmp::Ordering::Greater => {
@@ -351,6 +348,14 @@ mod tests {
     #[test]
     fn test_read_unknown_flag() -> Result<(), Error> {
         let file = File::open("tests/data/unknown-flag.ncw")?;
+        let mut ncw = NcwReader::read(file)?;
+        ncw.decode_samples()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_32bit_mono_float() -> Result<(), Error> {
+        let file = File::open("tests/data/32-bit-mono-float.ncw")?;
         let mut ncw = NcwReader::read(file)?;
         ncw.decode_samples()?;
         Ok(())
