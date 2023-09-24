@@ -54,13 +54,11 @@ impl<R: Read + Seek> NcwReader<R> {
         })
     }
 
-    pub fn read_block(&self, block_data: &Vec<u8>, block_header: &BlockHeader) -> Vec<i32> {
-        match block_header.flags {
-            0 => {}
-            1 => unimplemented!("mid/side encoding"),
-            2 => unimplemented!("32-bit float encoding"),
-            _ => panic!("Unknown interleaving format"),
-        }
+    // pub fn read_f32_block(&self, block_data: &Vec<u8>, block_header: &BlockHeader) -> Vec<f32> {}
+
+    pub fn read_i32_block(&self, block_data: &Vec<u8>, block_header: &BlockHeader) -> Vec<i32> {
+        dbg!(block_header.channel_encoding());
+        dbg!(block_header.sample_format());
 
         let bits = block_header.bits.unsigned_abs() as usize;
 
@@ -117,7 +115,7 @@ impl<R: Read + Seek> NcwReader<R> {
                 let data = self.reader.read_bytes(bits as usize * 64)?;
 
                 let mut current_sample = 0;
-                for sample in self.read_block(&data.clone(), &block_header) {
+                for sample in self.read_i32_block(&data.clone(), &block_header) {
                     let is_final_sample: bool = current_sample >= overflow_samples;
 
                     current_sample += 1;
@@ -143,45 +141,45 @@ impl<R: Read + Seek> NcwReader<R> {
         Ok(interleaved_samples)
     }
 
-    /// Decode all blocks into contiguous 32-bit PCM samples.
-    pub fn decode_contiguous_samples(&mut self) -> Result<Vec<i32>, Error> {
-        let total_samples = self.header.num_samples as usize * self.header.channels as usize;
-        let mut samples = Vec::new();
-
-        let overflow_samples =
-            (total_samples % MAX_SAMPLES_PER_BLOCK) / self.header.channels as usize;
-
-        for i in 0..self.block_offsets.len() {
-            let is_final_block: bool = i == self.block_offsets.len() - 1;
-
-            // Seek to current block
-            self.reader.seek(SeekFrom::Start(
-                self.header.data_offset as u64 + self.block_offsets[i] as u64,
-            ))?;
-
-            for _ in 0..self.header.channels {
-                let block_header = BlockHeader::read(&mut self.reader)?;
-
-                let bits = block_header.bits.unsigned_abs();
-                let data = self.reader.read_bytes(bits as usize * 64)?;
-
-                let mut current_sample = 0;
-                for sample in self.read_block(&data.clone(), &block_header) {
-                    let is_final_sample: bool = current_sample >= overflow_samples;
-
-                    current_sample += 1;
-
-                    // if we are on the final block
-                    if is_final_block && is_final_sample {
-                    } else {
-                        samples.push(sample);
-                    }
-                }
-            }
-        }
-
-        return Ok(samples);
-    }
+    // /// Decode all blocks into contiguous 32-bit PCM samples.
+    // pub fn decode_contiguous_samples(&mut self) -> Result<Vec<i32>, Error> {
+    //     let total_samples = self.header.num_samples as usize * self.header.channels as usize;
+    //     let mut samples = Vec::new();
+    //
+    //     let overflow_samples =
+    //         (total_samples % MAX_SAMPLES_PER_BLOCK) / self.header.channels as usize;
+    //
+    //     for i in 0..self.block_offsets.len() {
+    //         let is_final_block: bool = i == self.block_offsets.len() - 1;
+    //
+    //         // Seek to current block
+    //         self.reader.seek(SeekFrom::Start(
+    //             self.header.data_offset as u64 + self.block_offsets[i] as u64,
+    //         ))?;
+    //
+    //         for _ in 0..self.header.channels {
+    //             let block_header = BlockHeader::read(&mut self.reader)?;
+    //
+    //             let bits = block_header.bits.unsigned_abs();
+    //             let data = self.reader.read_bytes(bits as usize * 64)?;
+    //
+    //             let mut current_sample = 0;
+    //             for sample in self.read_i32_block(&data.clone(), &block_header) {
+    //                 let is_final_sample: bool = current_sample >= overflow_samples;
+    //
+    //                 current_sample += 1;
+    //
+    //                 // if we are on the final block
+    //                 if is_final_block && is_final_sample {
+    //                 } else {
+    //                     samples.push(sample);
+    //                 }
+    //             }
+    //         }
+    //     }
+    //
+    //     return Ok(samples);
+    // }
 }
 
 fn decode_delta_block_i32(base_sample: i32, deltas: &[u8], bits: usize) -> Vec<i32> {
@@ -249,6 +247,18 @@ fn read_packed_values_i32(data: &[u8], precision_in_bits: usize) -> Vec<i32> {
     values
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ChannelEncoding {
+    LeftRight,
+    MidSide,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SampleFormat {
+    PCM,
+    Float,
+}
+
 impl BlockHeader {
     pub fn read<R: ReadBytesExt>(mut reader: R) -> Result<BlockHeader, Error> {
         let mut block_reader = Cursor::new(reader.read_bytes(BLOCK_HEADER_SIZE)?);
@@ -261,6 +271,21 @@ impl BlockHeader {
             bits: block_reader.read_i16_le()?,
             flags: block_reader.read_u16_le()?,
         })
+    }
+
+    pub fn channel_encoding(&self) -> ChannelEncoding {
+        if self.flags & 0b0000000000000001 == 0b0000000000000001 {
+            ChannelEncoding::MidSide
+        } else {
+            ChannelEncoding::LeftRight
+        }
+    }
+    pub fn sample_format(&self) -> SampleFormat {
+        if self.flags & 0b0000000000000010 == 0b0000000000000010 {
+            SampleFormat::Float
+        } else {
+            SampleFormat::PCM
+        }
     }
 }
 
