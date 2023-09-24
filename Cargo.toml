@@ -9,7 +9,7 @@ repository = "https://github.com/monomadic/ncw"
 [package]
 name = "ncw"
 description = "Native Instruments NCW audio file format support"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["monomadic <themonomadic@protonmail.com>"]
 readme = "README.md"
