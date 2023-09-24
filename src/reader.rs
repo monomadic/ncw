@@ -95,19 +95,59 @@ impl<R: Read + Seek> NcwReader<R> {
         }
     }
 
-    // /// Decode all blocks into contiguous 32-bit PCM samples.
-    // pub fn decode_samples(&mut self) -> Result<Vec<i32>, Error> {
-    //     let total_samples = self.header.num_samples as usize * self.header.channels as usize;
-    //     let mut interleaved_samples = Vec::with_capacity(total_samples);
-    //
-    //     let mut channels = vec![
-    //         vec![0u8; self.header.bits_per_sample as usize * 64];
-    //         self.header.channels as usize
-    //     ];
-    // }
-
     /// Decode all blocks into contiguous 32-bit PCM samples.
     pub fn decode_samples(&mut self) -> Result<Vec<i32>, Error> {
+        let total_samples = self.header.num_samples as usize * self.header.channels as usize;
+        // let mut samples = Vec::new();
+
+        let mut channels = vec![Vec::new(); self.header.channels as usize];
+
+        let overflow_samples =
+            (total_samples % MAX_SAMPLES_PER_BLOCK) / self.header.channels as usize;
+
+        for i in 0..self.block_offsets.len() {
+            let is_final_block: bool = i == self.block_offsets.len() - 1;
+
+            // Seek to current block
+            self.reader.seek(SeekFrom::Start(
+                self.header.data_offset as u64 + self.block_offsets[i] as u64,
+            ))?;
+
+            for c in 0..self.header.channels as usize {
+                let block_header = BlockHeader::read(&mut self.reader)?;
+
+                let bits = block_header.bits.unsigned_abs();
+                let data = self.reader.read_bytes(bits as usize * 64)?;
+
+                let mut current_sample = 0;
+                for sample in self.read_block(&data.clone(), &block_header) {
+                    let is_final_sample: bool = current_sample >= overflow_samples;
+
+                    current_sample += 1;
+
+                    // if we are on the final block
+                    if is_final_block && is_final_sample {
+                    } else {
+                        // samples.push(sample);
+                        channels[c].push(sample);
+                    }
+                }
+            }
+        }
+
+        // interleave all samples
+        let mut interleaved_samples = Vec::new();
+        for i in 0..self.header.num_samples as usize {
+            for c in 0..self.header.channels as usize {
+                interleaved_samples.push(channels[c][i]);
+            }
+        }
+
+        Ok(interleaved_samples)
+    }
+
+    /// Decode all blocks into contiguous 32-bit PCM samples.
+    pub fn decode_contiguous_samples(&mut self) -> Result<Vec<i32>, Error> {
         let total_samples = self.header.num_samples as usize * self.header.channels as usize;
         let mut samples = Vec::new();
 
@@ -128,8 +168,6 @@ impl<R: Read + Seek> NcwReader<R> {
                 let bits = block_header.bits.unsigned_abs();
                 let data = self.reader.read_bytes(bits as usize * 64)?;
 
-                // dbg!(block_header, data);
-
                 let mut current_sample = 0;
                 for sample in self.read_block(&data.clone(), &block_header) {
                     let is_final_sample: bool = current_sample >= overflow_samples;
@@ -142,57 +180,11 @@ impl<R: Read + Seek> NcwReader<R> {
                         samples.push(sample);
                     }
                 }
-
-                // for sample in self.read_block(block_header) {
-                //     // dbg!(&sample, self.header.num_samples, current_sample);
-                //     samples.push(sample);
-                //     current_sample += 1;
-                //
-                //     // if this is the last block
-                //     if current_block == self.block_offsets.len() - 1 {
-                //         return Ok(samples);
-                //     }
-                // }
             }
         }
 
         return Ok(samples);
     }
-
-    // /// Decode all blocks into interleaved 32-bit PCM samples.
-    // pub fn decode_interleaved_samples(&mut self) -> Result<Vec<i32>, Error> {
-    //     let mut interleaved_samples = Vec::new();
-    //
-    //     for block_offset in self.block_offsets.clone() {
-    //         let mut channels = vec![Vec::new(); self.header.channels as usize];
-    //         let relative_block_offset = (self.header.data_offset + block_offset) as u64;
-    //
-    //         // Seek to block
-    //         self.reader.seek(SeekFrom::Start(relative_block_offset))?;
-    //
-    //         for (i, channel) in (0..self.header.channels).enumerate() {
-    //             let block_header = BlockHeader::read(&mut self.reader)?;
-    //             let samples = self.read_block(block_header);
-    //
-    //             dbg!(&samples);
-    //             // dbg!(i == self.header.channels as usize - 1);
-    //             // dbg!(self.header.num_samples as usize % MAX_SAMPLES_PER_BLOCK);
-    //
-    //             for sample in samples {
-    //                 channels[channel as usize].push(sample);
-    //             }
-    //         }
-    //
-    //         // interleave samples
-    //         let min_length = channels.iter().map(|ch| ch.len()).min().unwrap();
-    //         for i in 0..min_length {
-    //             for ch in &channels {
-    //                 interleaved_samples.push(ch[i]);
-    //             }
-    //         }
-    //     }
-    //     Ok(interleaved_samples)
-    // }
 }
 
 fn decode_delta_block_i32(base_sample: i32, deltas: &[u8], bits: usize) -> Vec<i32> {
