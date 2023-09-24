@@ -54,53 +54,145 @@ impl<R: Read + Seek> NcwReader<R> {
         })
     }
 
-    /// Decode all blocks in 32-bit PCM samples.
+    pub fn read_block(&self, block_data: &Vec<u8>, block_header: &BlockHeader) -> Vec<i32> {
+        match block_header.flags {
+            0 => {}
+            1 => unimplemented!("mid/side compression not implemented yet!"),
+            2 => unimplemented!("type 2 compression not implemented yet!"),
+            _ => panic!("Unknown interleaving format"),
+        }
+
+        let bits = block_header.bits.unsigned_abs() as usize;
+        // let block_data_len = bits * 64;
+        // let mut block_data = vec![0; block_data_len];
+        // self.reader.read_exact(&mut block_data).unwrap();
+
+        match block_header.bits.cmp(&0) {
+            std::cmp::Ordering::Greater => {
+                // Delta decode, block_data represents the delta from base_value
+                decode_delta_block_i32(block_header.base_value, &block_data, bits)
+            }
+            std::cmp::Ordering::Less => {
+                // Bit truncation (simple compression)
+                let bits = block_header.bits.unsigned_abs() as usize;
+                decode_truncated_block_i32(&block_data, bits)
+            }
+            std::cmp::Ordering::Equal => {
+                // No compression
+                let bytes_per_sample = self.header.bits_per_sample as usize / 8;
+                let mut samples = Vec::new();
+
+                let mut reader = Cursor::new(block_data);
+
+                for _ in 0..512 {
+                    let sample_bytes = reader.read_bytes(bytes_per_sample).unwrap();
+                    let sample = i32::from_le_bytes(sample_bytes.try_into().unwrap());
+                    samples.push(sample);
+                }
+
+                samples
+            }
+        }
+    }
+
+    // /// Decode all blocks into contiguous 32-bit PCM samples.
+    // pub fn decode_samples(&mut self) -> Result<Vec<i32>, Error> {
+    //     let total_samples = self.header.num_samples as usize * self.header.channels as usize;
+    //     let mut interleaved_samples = Vec::with_capacity(total_samples);
+    //
+    //     let mut channels = vec![
+    //         vec![0u8; self.header.bits_per_sample as usize * 64];
+    //         self.header.channels as usize
+    //     ];
+    // }
+
+    /// Decode all blocks into contiguous 32-bit PCM samples.
     pub fn decode_samples(&mut self) -> Result<Vec<i32>, Error> {
+        let total_samples = self.header.num_samples as usize * self.header.channels as usize;
         let mut samples = Vec::new();
 
-        for block_offset in &self.block_offsets {
+        let overflow_samples =
+            (total_samples % MAX_SAMPLES_PER_BLOCK) / self.header.channels as usize;
+
+        for i in 0..self.block_offsets.len() {
+            let is_final_block: bool = i == self.block_offsets.len() - 1;
+
+            // Seek to current block
             self.reader.seek(SeekFrom::Start(
-                (self.header.data_offset + block_offset) as u64,
+                self.header.data_offset as u64 + self.block_offsets[i] as u64,
             ))?;
 
-            let block_header = BlockHeader::read(&mut self.reader)?;
-            if block_header.flags == 1 {
-                unimplemented!("mid/side compression not implemented yet!");
-            }
+            for _ in 0..self.header.channels {
+                let block_header = BlockHeader::read(&mut self.reader)?;
 
-            let bits = block_header.bits.unsigned_abs() as usize;
-            let block_data_len = bits * 64;
-            let mut block_data = vec![0; block_data_len];
-            self.reader.read_exact(&mut block_data).unwrap();
+                let bits = block_header.bits.unsigned_abs();
+                let data = self.reader.read_bytes(bits as usize * 64)?;
 
-            match block_header.bits.cmp(&0) {
-                std::cmp::Ordering::Greater => {
-                    // Delta decode, block_data represents the delta from base_value
-                    samples.append(&mut decode_delta_block_i32(
-                        block_header.base_value,
-                        &block_data,
-                        bits,
-                    ));
-                }
-                std::cmp::Ordering::Less => {
-                    // Bit truncation (simple compression)
-                    let bits = block_header.bits.unsigned_abs() as usize;
-                    samples.append(&mut decode_truncated_block_i32(&block_data, bits));
-                }
-                std::cmp::Ordering::Equal => {
-                    // No compression
-                    let bytes_per_sample = self.header.bits_per_sample as usize / 8;
+                // dbg!(block_header, data);
 
-                    for _ in 0..512 {
-                        let sample_bytes = self.reader.read_bytes(bytes_per_sample).unwrap();
-                        let sample = i32::from_le_bytes(sample_bytes.try_into().unwrap());
+                let mut current_sample = 0;
+                for sample in self.read_block(&data.clone(), &block_header) {
+                    let is_final_sample: bool = current_sample >= overflow_samples;
+
+                    current_sample += 1;
+
+                    // if we are on the final block
+                    if is_final_block && is_final_sample {
+                    } else {
                         samples.push(sample);
                     }
                 }
+
+                // for sample in self.read_block(block_header) {
+                //     // dbg!(&sample, self.header.num_samples, current_sample);
+                //     samples.push(sample);
+                //     current_sample += 1;
+                //
+                //     // if this is the last block
+                //     if current_block == self.block_offsets.len() - 1 {
+                //         return Ok(samples);
+                //     }
+                // }
             }
         }
-        Ok(samples)
+
+        return Ok(samples);
     }
+
+    // /// Decode all blocks into interleaved 32-bit PCM samples.
+    // pub fn decode_interleaved_samples(&mut self) -> Result<Vec<i32>, Error> {
+    //     let mut interleaved_samples = Vec::new();
+    //
+    //     for block_offset in self.block_offsets.clone() {
+    //         let mut channels = vec![Vec::new(); self.header.channels as usize];
+    //         let relative_block_offset = (self.header.data_offset + block_offset) as u64;
+    //
+    //         // Seek to block
+    //         self.reader.seek(SeekFrom::Start(relative_block_offset))?;
+    //
+    //         for (i, channel) in (0..self.header.channels).enumerate() {
+    //             let block_header = BlockHeader::read(&mut self.reader)?;
+    //             let samples = self.read_block(block_header);
+    //
+    //             dbg!(&samples);
+    //             // dbg!(i == self.header.channels as usize - 1);
+    //             // dbg!(self.header.num_samples as usize % MAX_SAMPLES_PER_BLOCK);
+    //
+    //             for sample in samples {
+    //                 channels[channel as usize].push(sample);
+    //             }
+    //         }
+    //
+    //         // interleave samples
+    //         let min_length = channels.iter().map(|ch| ch.len()).min().unwrap();
+    //         for i in 0..min_length {
+    //             for ch in &channels {
+    //                 interleaved_samples.push(ch[i]);
+    //             }
+    //         }
+    //     }
+    //     Ok(interleaved_samples)
+    // }
 }
 
 fn decode_delta_block_i32(base_sample: i32, deltas: &[u8], bits: usize) -> Vec<i32> {
@@ -208,16 +300,65 @@ mod tests {
     use std::fs::File;
 
     #[test]
-    fn test_read_16bit() -> Result<(), Error> {
-        let file = File::open("test-data/NCW/16-bit.ncw")?;
+    fn test_read_16bit_mono() -> Result<(), Error> {
+        let file = File::open("tests/data/16-bit-mono.ncw")?;
         let mut ncw = NcwReader::read(file)?;
-        ncw.decode_samples()?;
+        let samples = ncw.decode_samples()?;
+
+        assert_eq!(samples[0], 0x0000);
+        assert_eq!(samples[16], 0x001B);
+        assert_eq!(samples[32], 0xFF5A);
+
+        assert_eq!(
+            ncw.header.num_samples as usize,
+            samples.len(),
+            "Incorrect number of decoded samples"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_read_24bit() -> Result<(), Error> {
-        let file = File::open("test-data/NCW/24-bit.ncw")?;
+    fn test_read_onezero_testfile() -> Result<(), Error> {
+        let file = File::open("tests/data/testfile-onezero-16-bit-stereo.ncw")?;
+        let mut ncw = NcwReader::read(file)?;
+        let samples = ncw.decode_samples()?;
+
+        assert_eq!(
+            ncw.header.num_samples as usize,
+            samples.len() / ncw.header.channels as usize,
+            "Incorrect number of decoded samples"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_16bit_stereo() -> Result<(), Error> {
+        let file = File::open("tests/data/16-bit-stereo.ncw")?;
+        let mut ncw = NcwReader::read(file)?;
+        let samples = ncw.decode_samples()?;
+
+        assert_eq!(samples[0], -1); // left sample 1
+        assert_eq!(samples[1], 0); // left sample 1
+
+        assert_eq!(
+            ncw.header.num_samples as usize,
+            samples.len() / ncw.header.channels as usize,
+            "Incorrect number of decoded samples"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_24bit_mono() -> Result<(), Error> {
+        let file = File::open("tests/data/24-bit-mono.ncw")?;
+        let mut ncw = NcwReader::read(file)?;
+        let _samples = ncw.decode_samples()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_unknown_flag() -> Result<(), Error> {
+        let file = File::open("tests/data/unknown-flag.ncw")?;
         let mut ncw = NcwReader::read(file)?;
         ncw.decode_samples()?;
         Ok(())

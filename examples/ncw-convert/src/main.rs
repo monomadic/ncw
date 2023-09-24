@@ -36,7 +36,18 @@ pub fn write_wav<R: Read + Seek, W: Write + Seek>(
 
     let mut writer = WavWriter::new(writer, spec)?;
 
-    for sample in reader.decode_samples()? {
+    let samples = reader.decode_samples()?;
+
+    let num_channels = spec.channels as usize;
+    let mut interleaved_samples = Vec::new();
+    let samples_per_channel = samples.len() / num_channels;
+    for i in 0..samples_per_channel {
+        for ch in 0..num_channels {
+            interleaved_samples.push(samples[i + (ch * samples_per_channel)]);
+        }
+    }
+
+    for sample in interleaved_samples {
         match reader.header.bits_per_sample {
             32 | 24 => {
                 writer.write_sample(sample)?;
