@@ -15,6 +15,6 @@ authors = ["monomadic <themonomadic@protonmail.com>"]
 readme = "README.md"
 homepage = "https://github.com/monomadic/ncw"
 keywords = ["audio", "decompression", "kontakt", "file-formats"]
-categories = ["command-line-utilities", "encoding", "multimedia::encoding", "multimedia::audio", "compression"]
+categories = ["encoding", "multimedia::encoding", "multimedia::audio", "compression"]
 license.workspace = true
 repository.workspace = true
