@@ -209,7 +209,11 @@ fn decode_truncated_block_i32(data: &[u8], bit_size: usize) -> Vec<i32> {
         for i in 0..((bit_size + 7) / 8) {
             temp |= (data[byte_offset + i] as i32) << (i * 8);
         }
-        let value = (temp >> bit_remainder) & ((1 << bit_size) - 1);
+        let mut bit_mask: i32 = 0;
+        for i in 0..bit_size {
+            bit_mask |= 1<<i;
+        }
+        let value = (temp >> bit_remainder) & bit_mask;
         samples.push(value);
 
         bit_offset += bit_size;
