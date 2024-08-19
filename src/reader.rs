@@ -209,7 +209,11 @@ fn decode_truncated_block_i32(data: &[u8], bit_size: usize) -> Vec<i32> {
         for i in 0..((bit_size + 7) / 8) {
             temp |= (data[byte_offset + i] as i32) << (i * 8);
         }
-        let value = (temp >> bit_remainder) & ((1 << bit_size) - 1);
+        let mut value = (temp >> bit_remainder) & ((1 << bit_size) - 1);
+
+        if value & (1 << (bit_size - 1)) != 0 {
+            value |= !0 << bit_size;
+        }
         samples.push(value);
 
         bit_offset += bit_size;
@@ -321,7 +325,7 @@ mod tests {
 
         assert_eq!(samples[0], 0x0000);
         assert_eq!(samples[16], 0x001B);
-        assert_eq!(samples[32], 0xFF5A);
+        assert_eq!(samples[32], -0x00A6);
 
         assert_eq!(
             ncw.header.num_samples as usize,
@@ -383,6 +387,16 @@ mod tests {
         let file = File::open("tests/data/32-bit-mono-float.ncw")?;
         let mut ncw = NcwReader::read(file)?;
         ncw.decode_samples()?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_truncated_block_i32_negative() -> Result<(), Error> {
+        let bits = 24;
+        let data: [u8; 3] = [0xfc, 0x31, 0xda];
+        let samples = decode_truncated_block_i32(&data, bits);
+
+        assert_eq!(samples[0], -2477572);
         Ok(())
     }
 }
