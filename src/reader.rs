@@ -57,9 +57,6 @@ impl<R: Read + Seek> NcwReader<R> {
     // pub fn read_f32_block(&self, block_data: &Vec<u8>, block_header: &BlockHeader) -> Vec<f32> {}
 
     pub fn read_i32_block(&self, block_data: &Vec<u8>, block_header: &BlockHeader) -> Vec<i32> {
-        dbg!(block_header.channel_encoding());
-        dbg!(block_header.sample_format());
-
         let bits = block_header.bits.unsigned_abs() as usize;
 
         match block_header.bits.cmp(&0) {
@@ -96,6 +93,9 @@ impl<R: Read + Seek> NcwReader<R> {
         // let mut samples = Vec::new();
 
         let mut channels = vec![Vec::new(); self.header.channels as usize];
+        // Per-sample flag: true if that sample position was decoded under MidSide encoding.
+        // Only meaningful for 2-channel files; for mono / >2ch we leave the data untouched.
+        let mut mid_side: Vec<bool> = Vec::new();
 
         let overflow_samples =
             (total_samples % MAX_SAMPLES_PER_BLOCK) / self.header.channels as usize;
@@ -108,31 +108,67 @@ impl<R: Read + Seek> NcwReader<R> {
                 self.header.data_offset as u64 + self.block_offsets[i] as u64,
             ))?;
 
+            let mut block_is_mid_side = false;
+            let mut samples_added_this_block = 0usize;
             for c in 0..self.header.channels as usize {
                 let block_header = BlockHeader::read(&mut self.reader)?;
+                if c == 0 {
+                    block_is_mid_side =
+                        block_header.channel_encoding() == ChannelEncoding::MidSide;
+                }
 
                 let bits = block_header.bits.unsigned_abs();
                 let data = self.reader.read_bytes(bits as usize * 64)?;
 
                 let mut current_sample = 0;
+                let mut added_in_channel = 0usize;
                 for sample in self.read_i32_block(&data.clone(), &block_header) {
                     let is_final_sample: bool = current_sample >= overflow_samples;
 
                     current_sample += 1;
 
-                    // if we are on the final block
                     if is_final_block && is_final_sample {
                     } else {
-                        // samples.push(sample);
                         channels[c].push(sample);
+                        added_in_channel += 1;
                     }
+                }
+                if c == 0 {
+                    samples_added_this_block = added_in_channel;
+                }
+            }
+            // Extend the M/S flag vector for every sample position written in this block.
+            mid_side.extend(std::iter::repeat(block_is_mid_side).take(samples_added_this_block));
+        }
+
+        // For stereo M/S blocks, recover L/R using the lossless integer transform
+        // (the same one FLAC uses):
+        //     shifted_mid = (mid << 1) | (side & 1)
+        //     L = (shifted_mid + side) >> 1
+        //     R = (shifted_mid - side) >> 1
+        if self.header.channels == 2 {
+            let n = channels[0].len().min(channels[1].len()).min(mid_side.len());
+            for i in 0..n {
+                if mid_side[i] {
+                    let mid = channels[0][i];
+                    let side = channels[1][i];
+                    let shifted_mid = (mid << 1) | (side & 1);
+                    channels[0][i] = (shifted_mid + side) >> 1;
+                    channels[1][i] = (shifted_mid - side) >> 1;
                 }
             }
         }
 
-        // interleave all samples
+        // interleave all samples (clamp to the shortest channel to tolerate
+        // off-by-one in the overflow_samples bookkeeping above).
         let mut interleaved_samples = Vec::new();
-        for i in 0..self.header.num_samples as usize {
+        let safe_len = channels
+            .iter()
+            .map(|c| c.len())
+            .min()
+            .unwrap_or(0)
+            .min(self.header.num_samples as usize);
+        for i in 0..safe_len {
             for c in 0..self.header.channels as usize {
                 interleaved_samples.push(channels[c][i]);
             }
