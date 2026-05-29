@@ -38,17 +38,23 @@ pub fn write_wav<R: Read + Seek, W: Write + Seek>(
 
     let samples = reader.decode_samples()?;
 
+    // Saturate decoded samples to the destination bit-depth range. The NCW
+    // decoder occasionally produces values one or two LSBs outside the nominal
+    // range (e.g. after delta accumulation or the M/S transform on near-clipping
+    // material) — hound rejects those with Error::TooWide and aborts the whole
+    // file. Clipping is audibly inaudible at the affected sample count and lets
+    // the conversion finish.
+    let clamp = |s: i32, bits: u16| -> i32 {
+        let max = (1i64 << (bits - 1)) - 1;
+        let min = -(1i64 << (bits - 1));
+        (s as i64).clamp(min, max) as i32
+    };
     for sample in samples {
         match reader.header.bits_per_sample {
-            32 | 24 => {
-                writer.write_sample(sample)?;
-            }
-            16 => {
-                writer.write_sample(sample as i16)?;
-            }
-            8 => {
-                writer.write_sample(sample as i8)?;
-            }
+            32 => writer.write_sample(sample)?,
+            24 => writer.write_sample(clamp(sample, 24))?,
+            16 => writer.write_sample(clamp(sample, 16) as i16)?,
+            8 => writer.write_sample(clamp(sample, 8) as i8)?,
             _ => panic!("Unknown output sample format"),
         }
     }
