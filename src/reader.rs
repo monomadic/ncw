@@ -21,7 +21,7 @@ pub const SAMPLES_PER_BLOCK: usize = 512;
 /// `f32::from_bits(sample as u32)`.
 #[derive(Debug)]
 pub struct NcwReader<R> {
-    pub reader: R,
+    reader: R,
     pub header: NcwHeader,
     /// Byte offset of each block, relative to `header.data_offset`.
     pub block_offsets: Vec<u32>,
@@ -72,15 +72,7 @@ impl<R: Read + Seek> NcwReader<R> {
     /// Parse the file header and block offset table.
     pub fn read(mut reader: R) -> Result<Self, Error> {
         let header = NcwHeader::read(&mut reader)?;
-
-        if header.channels == 0 {
-            return Err(Error::InvalidHeader("channel count is zero"));
-        }
-        if header.data_offset < header.blocks_offset {
-            return Err(Error::InvalidHeader(
-                "data offset precedes block offset table",
-            ));
-        }
+        header.validate()?;
 
         // The table holds one entry per block plus a trailing end-of-data
         // sentinel, which is not a block.
@@ -88,7 +80,9 @@ impl<R: Read + Seek> NcwReader<R> {
         let num_blocks = table_entries.saturating_sub(1) as usize;
 
         reader.seek(SeekFrom::Start(header.blocks_offset as u64))?;
-        let mut block_offsets = Vec::with_capacity(num_blocks);
+        // Not pre-sized: `num_blocks` comes from an untrusted header, and a
+        // short file will fail the reads long before the vector grows large.
+        let mut block_offsets = Vec::new();
         for _ in 0..num_blocks {
             block_offsets.push(reader.read_u32_le()?);
         }
@@ -109,30 +103,70 @@ impl<R: Read + Seek> NcwReader<R> {
         })
     }
 
+    /// Borrow the underlying reader.
+    pub fn get_ref(&self) -> &R {
+        &self.reader
+    }
+
+    /// Mutably borrow the underlying reader. Moving its position is harmless:
+    /// [`NcwReader::decode_samples`] seeks to every block explicitly.
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+
+    /// Consume the decoder and return the underlying reader.
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
+
     /// Decode every block into interleaved 32-bit samples.
     ///
     /// The result has exactly `num_samples * channels` entries. Mid/side
-    /// encoded blocks (see [`BlockHeader::channel_encoding`]) are returned as
-    /// stored, without conversion to left/right.
+    /// encoded blocks (see [`BlockHeader::channel_encoding`]) are converted to
+    /// left/right, so the output is always plain channel order.
     pub fn decode_samples(&mut self) -> Result<Vec<i32>, Error> {
         let num_samples = self.header.num_samples as usize;
         let num_channels = self.header.channels as usize;
 
-        let mut channels = vec![Vec::with_capacity(num_samples); num_channels];
+        // Reserve no more than the block table can actually deliver, so a
+        // bogus `num_samples` cannot force a huge allocation up front.
+        let capacity = num_samples.min(self.block_offsets.len() * SAMPLES_PER_BLOCK);
+        let mut channels: Vec<Vec<i32>> = (0..num_channels)
+            .map(|_| Vec::with_capacity(capacity))
+            .collect();
 
-        for (i, &offset) in self.block_offsets.iter().enumerate() {
+        for &offset in &self.block_offsets {
+            if channels[0].len() >= num_samples {
+                break;
+            }
+            let block_start = channels[0].len();
+
             self.reader.seek(SeekFrom::Start(
                 self.header.data_offset as u64 + offset as u64,
             ))?;
 
+            let mut mid_side = false;
             for channel in channels.iter_mut() {
                 let block_header = BlockHeader::read(&mut self.reader)?;
-                let samples = read_block(&mut self.reader, &self.header, &block_header)?;
-                channel.extend_from_slice(&samples);
+                if block_header.sample_format() != self.sample_format {
+                    return Err(Error::InvalidHeader("sample format changes between blocks"));
+                }
+                mid_side |= block_header.channel_encoding() == ChannelEncoding::MidSide;
+                read_block(&mut self.reader, &self.header, &block_header, channel)?;
             }
 
-            if i + 1 == self.block_offsets.len() || channels[0].len() >= num_samples {
-                break;
+            if mid_side {
+                if num_channels != 2 {
+                    return Err(Error::InvalidHeader(
+                        "mid/side encoding requires exactly two channels",
+                    ));
+                }
+                let (mid, side) = channels.split_at_mut(1);
+                decode_mid_side(
+                    &mut mid[0][block_start..],
+                    &mut side[0][block_start..],
+                    self.sample_format,
+                );
             }
         }
 
@@ -158,13 +192,14 @@ impl<R: Read + Seek> NcwReader<R> {
     }
 }
 
-/// Read and decode one channel's block body. The reader must be positioned
-/// just after the block header.
+/// Read and decode one channel's block body, appending the samples to `out`.
+/// The reader must be positioned just after the block header.
 fn read_block<R: Read>(
     reader: &mut R,
     header: &NcwHeader,
     block: &BlockHeader,
-) -> Result<Vec<i32>, Error> {
+    out: &mut Vec<i32>,
+) -> Result<(), Error> {
     let bits = block.bits.unsigned_abs() as usize;
     if bits > 32 {
         return Err(Error::UnsupportedBitDepth(block.bits));
@@ -172,66 +207,89 @@ fn read_block<R: Read>(
 
     match block.bits.cmp(&0) {
         std::cmp::Ordering::Greater => {
-            // Delta encoded: each value is the difference from the previous sample.
+            // Delta encoded: each value is the difference to the next sample.
             let data = reader.read_bytes(bits * SAMPLES_PER_BLOCK / 8)?;
-            Ok(decode_delta_block(block.base_value, &data, bits))
+            let mut current = block.base_value;
+            for delta in packed_values(&data, bits) {
+                out.push(current);
+                current = current.wrapping_add(delta);
+            }
         }
         std::cmp::Ordering::Less => {
             // Bit truncated: raw samples packed at `bits` bits each.
             let data = reader.read_bytes(bits * SAMPLES_PER_BLOCK / 8)?;
-            Ok(read_packed_values(&data, bits))
+            out.extend(packed_values(&data, bits));
         }
         std::cmp::Ordering::Equal => {
-            // Uncompressed at the file's native bit depth.
+            // Uncompressed at the file's native bit depth (validated on read).
             let bytes_per_sample = header.bits_per_sample as usize / 8;
-            if !(1..=4).contains(&bytes_per_sample) || header.bits_per_sample % 8 != 0 {
-                return Err(Error::InvalidHeader("unsupported bits per sample"));
-            }
             let data = reader.read_bytes(bytes_per_sample * SAMPLES_PER_BLOCK)?;
-            Ok(data
-                .chunks_exact(bytes_per_sample)
-                .map(|chunk| {
-                    let mut raw = [0u8; 4];
-                    raw[..bytes_per_sample].copy_from_slice(chunk);
-                    sign_extend(u32::from_le_bytes(raw), bytes_per_sample * 8)
-                })
-                .collect())
+            out.extend(data.chunks_exact(bytes_per_sample).map(|chunk| {
+                let mut raw = [0u8; 4];
+                raw[..bytes_per_sample].copy_from_slice(chunk);
+                sign_extend(u32::from_le_bytes(raw), bytes_per_sample * 8)
+            }));
         }
     }
+    Ok(())
 }
 
-fn decode_delta_block(base_sample: i32, deltas: &[u8], bits: usize) -> Vec<i32> {
-    let delta_values = read_packed_values(deltas, bits);
-
-    let mut samples = Vec::with_capacity(delta_values.len());
-    let mut current = base_sample;
-    for delta in delta_values {
-        samples.push(current);
-        current = current.wrapping_add(delta);
+/// Convert a mid/side channel pair to left/right in place.
+///
+/// The encoder stores `mid = (l + r) / 2` and `side = (l - r) / 2`, so left is
+/// `mid + side` and right is `mid - side`. The same arithmetic applies to PCM
+/// and float files.
+fn decode_mid_side(mid: &mut [i32], side: &mut [i32], format: SampleFormat) {
+    for (m, s) in mid.iter_mut().zip(side.iter_mut()) {
+        match format {
+            SampleFormat::Pcm => {
+                let (left, right) = (m.wrapping_add(*s), m.wrapping_sub(*s));
+                *m = left;
+                *s = right;
+            }
+            SampleFormat::Float => {
+                let (mid, side) = (f32::from_bits(*m as u32), f32::from_bits(*s as u32));
+                *m = (mid + side).to_bits() as i32;
+                *s = (mid - side).to_bits() as i32;
+            }
+        }
     }
-    samples
 }
 
 /// Unpack little-endian bit-packed signed integers of `bits` width (1..=32).
-fn read_packed_values(data: &[u8], bits: usize) -> Vec<i32> {
+fn packed_values(data: &[u8], bits: usize) -> PackedValues<'_> {
     debug_assert!((1..=32).contains(&bits));
-    let mut values = Vec::with_capacity(data.len() * 8 / bits);
-    let mask = (1u64 << bits) - 1;
-    let mut accumulator: u64 = 0;
-    let mut available = 0usize;
-
-    for &byte in data {
-        accumulator |= (byte as u64) << available;
-        available += 8;
-
-        while available >= bits {
-            values.push(sign_extend((accumulator & mask) as u32, bits));
-            accumulator >>= bits;
-            available -= bits;
-        }
+    PackedValues {
+        data: data.iter(),
+        bits,
+        mask: (1u64 << bits) - 1,
+        accumulator: 0,
+        available: 0,
     }
+}
 
-    values
+struct PackedValues<'a> {
+    data: std::slice::Iter<'a, u8>,
+    bits: usize,
+    mask: u64,
+    accumulator: u64,
+    available: usize,
+}
+
+impl Iterator for PackedValues<'_> {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        while self.available < self.bits {
+            let &byte = self.data.next()?;
+            self.accumulator |= (byte as u64) << self.available;
+            self.available += 8;
+        }
+        let value = sign_extend((self.accumulator & self.mask) as u32, self.bits);
+        self.accumulator >>= self.bits;
+        self.available -= self.bits;
+        Some(value)
+    }
 }
 
 /// Sign-extend the low `bits` bits of `raw` to an i32.
@@ -292,39 +350,65 @@ impl NcwHeader {
             data_size: reader.read_u32_le()?,
         })
     }
+
+    fn validate(&self) -> Result<(), Error> {
+        if self.channels == 0 {
+            return Err(Error::InvalidHeader("channel count is zero"));
+        }
+        if !matches!(self.bits_per_sample, 8 | 16 | 24 | 32) {
+            return Err(Error::InvalidHeader("unsupported bits per sample"));
+        }
+        if self.data_offset < self.blocks_offset {
+            return Err(Error::InvalidHeader(
+                "data offset precedes block offset table",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn unpack(data: &[u8], bits: usize) -> Vec<i32> {
+        packed_values(data, bits).collect()
+    }
+
     #[test]
     fn packed_values_sign_extend() {
         // Two 4-bit values: 0x7 and 0xF (-1), then 0x8 (-8) and 0x0.
-        assert_eq!(read_packed_values(&[0xF7, 0x08], 4), vec![7, -1, -8, 0]);
+        assert_eq!(unpack(&[0xF7, 0x08], 4), vec![7, -1, -8, 0]);
     }
 
     #[test]
     fn packed_values_full_width() {
-        let bytes = (-24i32).to_le_bytes();
-        assert_eq!(read_packed_values(&bytes, 32), vec![-24]);
-        let bytes = (-24i16).to_le_bytes();
-        assert_eq!(read_packed_values(&bytes, 16), vec![-24]);
+        assert_eq!(unpack(&(-24i32).to_le_bytes(), 32), vec![-24]);
+        assert_eq!(unpack(&(-24i16).to_le_bytes(), 16), vec![-24]);
     }
 
     #[test]
     fn packed_values_unaligned_width() {
         // 5-bit values 1, 2, 3 packed LSB-first: 0b00011_00010_00001 = 0x0C41
-        assert_eq!(read_packed_values(&[0x41, 0x0C], 5), vec![1, 2, 3]);
+        assert_eq!(unpack(&[0x41, 0x0C], 5), vec![1, 2, 3]);
     }
 
     #[test]
-    fn delta_block_accumulates() {
-        // 8-bit deltas: +1, +1, -2 starting at 10 -> 10, 11, 12, 10
-        assert_eq!(
-            decode_delta_block(10, &[1, 1, 0xFE, 0], 8),
-            vec![10, 11, 12, 10]
-        );
+    fn mid_side_pcm() {
+        let mut mid = vec![10, -3, i32::MAX];
+        let mut side = vec![4, 5, 1];
+        decode_mid_side(&mut mid, &mut side, SampleFormat::Pcm);
+        assert_eq!(mid, vec![14, 2, i32::MIN]);
+        assert_eq!(side, vec![6, -8, i32::MAX - 1]);
+    }
+
+    #[test]
+    fn mid_side_float() {
+        let mut mid = vec![0.5f32.to_bits() as i32];
+        let mut side = vec![0.25f32.to_bits() as i32];
+        decode_mid_side(&mut mid, &mut side, SampleFormat::Float);
+        assert_eq!(f32::from_bits(mid[0] as u32), 0.75);
+        assert_eq!(f32::from_bits(side[0] as u32), 0.25);
     }
 
     #[test]

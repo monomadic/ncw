@@ -48,7 +48,11 @@ pub fn write_wav<R: Read + Seek, W: Write + Seek>(
             (false, 32) | (false, 24) => writer.write_sample(sample)?,
             (false, 16) => writer.write_sample(sample as i16)?,
             (false, 8) => writer.write_sample(sample as i8)?,
-            _ => return Err(format!("unsupported sample format: {bits}-bit float={is_float}").into()),
+            _ => {
+                return Err(
+                    format!("unsupported sample format: {bits}-bit float={is_float}").into(),
+                );
+            }
         }
     }
     writer.finalize()?;

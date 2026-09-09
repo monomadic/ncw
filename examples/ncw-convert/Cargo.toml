@@ -1,8 +1,9 @@
 [package]
 name = "ncw-convert"
 description = "Native Instruments NCW audio file to wav converter"
-version = "0.2.0"
-edition = "2021"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.85"
 readme = "README.md"
 keywords = ["audio", "decompression", "kontakt", "file-formats"]
 categories = ["command-line-utilities", "encoding", "multimedia::encoding", "multimedia::audio", "compression"]
@@ -11,4 +12,4 @@ repository.workspace = true
 
 [dependencies]
 hound = "3.5.0"
-ncw = { version = "0.2.0", path = "../.." }
+ncw = { version = "0.3.0", path = "../.." }

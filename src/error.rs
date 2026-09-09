@@ -1,6 +1,7 @@
 use std::{error::Error, fmt::Display};
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum NcwError {
     /// The file does not start with an NCW magic number.
     InvalidFileSignature,
@@ -12,8 +13,8 @@ pub enum NcwError {
     UnsupportedBitDepth(i16),
     /// Fewer samples were decoded than the header promised.
     TruncatedData { expected: usize, actual: usize },
-    /// Could not read the requested number of bytes.
-    ReadError(usize),
+    /// Reading the underlying stream failed. A file that ends early surfaces
+    /// as [`std::io::ErrorKind::UnexpectedEof`].
     IoError(std::io::Error),
 }
 
@@ -37,7 +38,6 @@ impl Display for NcwError {
                 f,
                 "decoded {actual} samples per channel, header promised {expected}"
             ),
-            Self::ReadError(n) => write!(f, "failed to read {n} bytes"),
             Self::IoError(e) => write!(f, "io error: {e}"),
         }
     }

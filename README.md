@@ -15,27 +15,32 @@ This repository also includes an ncw to wav conversion cli tool, `ncw-convert`.
 
 ## Requirements
 
-- Rust 1.58 or higher
+- Rust 1.85 or higher (edition 2024)
 
 ## Usage
 
-```rust
+```rust,no_run
 use ncw::{NcwReader, SampleFormat};
 
-let input = File::open(&args[1])?;
-let mut ncw = NcwReader::read(input)?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let input = std::fs::File::open("sample.ncw")?;
+    let mut ncw = NcwReader::read(input)?;
 
-println!("channels: {}", ncw.header.channels);
-println!("sample_rate: {}", ncw.header.sample_rate);
-println!("bits_per_sample: {}", ncw.header.bits_per_sample);
+    println!("channels: {}", ncw.header.channels);
+    println!("sample_rate: {}", ncw.header.sample_rate);
+    println!("bits_per_sample: {}", ncw.header.bits_per_sample);
 
-// Samples are interleaved i32. PCM files give sign-extended integers at the
-// file's bit depth; float files give raw f32 bit patterns.
-for sample in ncw.decode_samples()? {
-    match ncw.sample_format {
-        SampleFormat::Pcm => println!("{sample}"),
-        SampleFormat::Float => println!("{}", f32::from_bits(sample as u32)),
+    // Samples are interleaved i32 in plain channel order; mid/side encoded
+    // blocks are converted to left/right for you. PCM files give
+    // sign-extended integers at the file's bit depth; float files give raw
+    // f32 bit patterns.
+    for sample in ncw.decode_samples()? {
+        match ncw.sample_format {
+            SampleFormat::Pcm => println!("{sample}"),
+            SampleFormat::Float => println!("{}", f32::from_bits(sample as u32)),
+        }
     }
+    Ok(())
 }
 ```
 

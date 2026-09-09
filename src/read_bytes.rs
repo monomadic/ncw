@@ -1,7 +1,5 @@
 use std::io::{self, Read};
 
-type Error = crate::NcwError;
-
 /// Extensions to io::Read for simplifying reading bytes.
 pub trait ReadBytesExt: Read {
     fn read_u16_le(&mut self) -> io::Result<u16> {
@@ -40,11 +38,10 @@ pub trait ReadBytesExt: Read {
         Ok(u64::from_be_bytes(buf))
     }
 
-    /// Read exactly `bytes` bytes, or fail with `NcwError::ReadError`.
-    fn read_bytes(&mut self, bytes: usize) -> Result<Vec<u8>, Error> {
+    /// Read exactly `bytes` bytes.
+    fn read_bytes(&mut self, bytes: usize) -> io::Result<Vec<u8>> {
         let mut buf = vec![0u8; bytes];
-        self.read_exact(&mut buf)
-            .map_err(|_| Error::ReadError(bytes))?;
+        self.read_exact(&mut buf)?;
         Ok(buf)
     }
 }
@@ -71,9 +68,7 @@ mod tests {
     #[test]
     fn test_read_bytes_short() {
         let mut cursor = io::Cursor::new(&[1u8, 2][..]);
-        assert!(matches!(
-            cursor.read_bytes(4),
-            Err(crate::NcwError::ReadError(4))
-        ));
+        let err = cursor.read_bytes(4).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
     }
 }

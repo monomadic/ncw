@@ -79,7 +79,10 @@ fn check(name: &str) {
     let wav = read_wav(&wav_path);
 
     assert_eq!(ncw.header.channels, wav.channels, "{name}: channels");
-    assert_eq!(ncw.header.sample_rate, wav.sample_rate, "{name}: sample rate");
+    assert_eq!(
+        ncw.header.sample_rate, wav.sample_rate,
+        "{name}: sample rate"
+    );
     assert_eq!(ncw.header.bits_per_sample, wav.bits, "{name}: bit depth");
     assert_eq!(
         ncw.sample_format == SampleFormat::Float,
@@ -167,4 +170,252 @@ fn truncated_file_is_an_error_not_a_panic() {
     let cut = &bytes[..bytes.len() / 2];
     let mut ncw = NcwReader::read(std::io::Cursor::new(cut)).unwrap();
     assert!(ncw.decode_samples().is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Synthetic fixtures. No real file in `tests/data` uses mid/side or raw
+// (`bits == 0`) blocks, so those paths are covered with NCW files built here.
+// ---------------------------------------------------------------------------
+
+mod synth {
+    use ncw::SAMPLES_PER_BLOCK;
+
+    pub const MID_SIDE: u16 = 0b01;
+    pub const FLOAT: u16 = 0b10;
+
+    /// Pack signed values LSB-first at `bits` per value, as the format does.
+    pub fn pack(values: &[i32], bits: usize) -> Vec<u8> {
+        assert_eq!(values.len(), SAMPLES_PER_BLOCK);
+        let mut out = Vec::new();
+        let mut acc: u64 = 0;
+        let mut have = 0;
+        for &v in values {
+            acc |= ((v as u32 as u64) & ((1u64 << bits) - 1)) << have;
+            have += bits;
+            while have >= 8 {
+                out.push(acc as u8);
+                acc >>= 8;
+                have -= 8;
+            }
+        }
+        assert_eq!(have, 0);
+        out
+    }
+
+    /// One channel's sub-block: 16-byte header followed by the body.
+    pub fn block(base: i32, bits: i16, flags: u16, body: &[u8]) -> Vec<u8> {
+        let mut b = 0x160C9A3Eu32.to_be_bytes().to_vec();
+        b.extend(base.to_le_bytes());
+        b.extend(bits.to_le_bytes());
+        b.extend(flags.to_le_bytes());
+        b.extend([0u8; 4]); // reserved, always zero
+        b.extend(body);
+        b
+    }
+
+    /// Assemble a whole file. Each entry of `blocks` is one block: the
+    /// concatenated per-channel sub-blocks.
+    pub fn file(
+        channels: u16,
+        bits_per_sample: u16,
+        num_samples: u32,
+        blocks: &[Vec<u8>],
+    ) -> Vec<u8> {
+        let blocks_offset = 120u32;
+        let data_offset = blocks_offset + 4 * (blocks.len() as u32 + 1);
+        let data_size: u32 = blocks.iter().map(|b| b.len() as u32).sum();
+
+        let mut f = 0x01A89ED631010000u64.to_be_bytes().to_vec();
+        f.extend(channels.to_le_bytes());
+        f.extend(bits_per_sample.to_le_bytes());
+        f.extend(48000u32.to_le_bytes());
+        f.extend(num_samples.to_le_bytes());
+        f.extend(blocks_offset.to_le_bytes());
+        f.extend(data_offset.to_le_bytes());
+        f.extend(data_size.to_le_bytes());
+        f.resize(blocks_offset as usize, 0);
+
+        let mut offset = 0u32;
+        for b in blocks {
+            f.extend(offset.to_le_bytes());
+            offset += b.len() as u32;
+        }
+        f.extend(data_size.to_le_bytes());
+        for b in blocks {
+            f.extend(b);
+        }
+        f
+    }
+}
+
+type MemReader = NcwReader<std::io::Cursor<Vec<u8>>>;
+
+fn decode(bytes: Vec<u8>) -> Result<(MemReader, Vec<i32>), ncw::NcwError> {
+    let mut ncw = NcwReader::read(std::io::Cursor::new(bytes))?;
+    let samples = ncw.decode_samples()?;
+    Ok((ncw, samples))
+}
+
+fn ramp(offset: i32) -> Vec<i32> {
+    (0..ncw::SAMPLES_PER_BLOCK as i32)
+        .map(|i| i * 7 - 1000 + offset)
+        .collect()
+}
+
+#[test]
+fn mid_side_pcm_blocks_are_converted_to_left_right() {
+    let mid = ramp(0);
+    let side = ramp(300);
+    let file = synth::file(
+        2,
+        16,
+        512,
+        &[[
+            synth::block(0, -16, synth::MID_SIDE, &synth::pack(&mid, 16)),
+            synth::block(0, -16, synth::MID_SIDE, &synth::pack(&side, 16)),
+        ]
+        .concat()],
+    );
+    let (_, samples) = decode(file).unwrap();
+    for i in 0..512 {
+        assert_eq!(samples[2 * i], mid[i] + side[i], "left at {i}");
+        assert_eq!(samples[2 * i + 1], mid[i] - side[i], "right at {i}");
+    }
+}
+
+#[test]
+fn mid_side_is_applied_per_block() {
+    // First block plain left/right, second block mid/side; both must decode.
+    let a = ramp(0);
+    let b = ramp(5);
+    let plain = [
+        synth::block(0, -16, 0, &synth::pack(&a, 16)),
+        synth::block(0, -16, 0, &synth::pack(&b, 16)),
+    ]
+    .concat();
+    let ms = [
+        synth::block(0, -16, synth::MID_SIDE, &synth::pack(&a, 16)),
+        synth::block(0, -16, synth::MID_SIDE, &synth::pack(&b, 16)),
+    ]
+    .concat();
+    let (_, samples) = decode(synth::file(2, 16, 1024, &[plain, ms])).unwrap();
+    for i in 0..512 {
+        assert_eq!(samples[2 * i], a[i]);
+        assert_eq!(samples[2 * i + 1], b[i]);
+        assert_eq!(samples[1024 + 2 * i], a[i] + b[i]);
+        assert_eq!(samples[1024 + 2 * i + 1], a[i] - b[i]);
+    }
+}
+
+#[test]
+fn mid_side_float_blocks_use_float_arithmetic() {
+    let mid: Vec<i32> = (0..512)
+        .map(|i| (i as f32 / 1024.0).to_bits() as i32)
+        .collect();
+    let side: Vec<i32> = (0..512).map(|_| 0.125f32.to_bits() as i32).collect();
+    let flags = synth::MID_SIDE | synth::FLOAT;
+    let file = synth::file(
+        2,
+        32,
+        512,
+        &[[
+            synth::block(0, -32, flags, &synth::pack(&mid, 32)),
+            synth::block(0, -32, flags, &synth::pack(&side, 32)),
+        ]
+        .concat()],
+    );
+    let (ncw, samples) = decode(file).unwrap();
+    assert_eq!(ncw.sample_format, SampleFormat::Float);
+    for i in 0..512 {
+        let m = i as f32 / 1024.0;
+        assert_eq!(f32::from_bits(samples[2 * i] as u32), m + 0.125);
+        assert_eq!(f32::from_bits(samples[2 * i + 1] as u32), m - 0.125);
+    }
+}
+
+#[test]
+fn mid_side_on_mono_is_an_error() {
+    let file = synth::file(
+        1,
+        16,
+        512,
+        &[synth::block(
+            0,
+            -16,
+            synth::MID_SIDE,
+            &synth::pack(&ramp(0), 16),
+        )],
+    );
+    assert!(matches!(decode(file), Err(ncw::NcwError::InvalidHeader(_))));
+}
+
+#[test]
+fn raw_blocks_decode_at_native_bit_depth() {
+    for (bits_per_sample, values) in [
+        (
+            8u16,
+            (0..512).map(|i| (i % 256) - 128).collect::<Vec<i32>>(),
+        ),
+        (16, ramp(0)),
+        (24, (0..512).map(|i| i * 30000 - 8_000_000).collect()),
+        (
+            32,
+            (0..512).map(|i| i * 4_000_000 - 1_000_000_000).collect(),
+        ),
+    ] {
+        let body: Vec<u8> = values
+            .iter()
+            .flat_map(|v| v.to_le_bytes()[..bits_per_sample as usize / 8].to_vec())
+            .collect();
+        let file = synth::file(1, bits_per_sample, 512, &[synth::block(0, 0, 0, &body)]);
+        let (_, samples) = decode(file).unwrap();
+        assert_eq!(samples, values, "{bits_per_sample}-bit raw block");
+    }
+}
+
+#[test]
+fn delta_blocks_accumulate_from_base() {
+    let deltas: Vec<i32> = (0..512).map(|i| (i % 9) - 4).collect();
+    let file = synth::file(
+        1,
+        16,
+        512,
+        &[synth::block(1000, 4, 0, &synth::pack(&deltas, 4))],
+    );
+    let (_, samples) = decode(file).unwrap();
+    let mut expected = Vec::new();
+    let mut cur = 1000;
+    for d in deltas {
+        expected.push(cur);
+        cur += d;
+    }
+    assert_eq!(samples, expected);
+}
+
+#[test]
+fn sample_format_change_between_blocks_is_an_error() {
+    let file = synth::file(
+        1,
+        16,
+        1024,
+        &[
+            synth::block(0, -16, 0, &synth::pack(&ramp(0), 16)),
+            synth::block(0, -16, synth::FLOAT, &synth::pack(&ramp(0), 16)),
+        ],
+    );
+    assert!(matches!(decode(file), Err(ncw::NcwError::InvalidHeader(_))));
+}
+
+#[test]
+fn invalid_bits_per_sample_is_rejected_on_read() {
+    let file = synth::file(
+        1,
+        12,
+        512,
+        &[synth::block(0, -16, 0, &synth::pack(&ramp(0), 16))],
+    );
+    assert!(matches!(
+        NcwReader::read(std::io::Cursor::new(file)),
+        Err(ncw::NcwError::InvalidHeader(_))
+    ));
 }
