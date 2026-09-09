@@ -11,25 +11,31 @@ NCW (Native Instruments Compressed Wave) is a lossless compression algorithm dev
 
 This library is a zero-dependency Rust-based library to decode NCW files. It serves as part of a [wider reverse engineering effort](https://github.com/open-sound) of proprietary audio formats, and this particular library is used in [ni-file](https://github.com/monomadic/ni-file), a library for Native Instruments file formats support in rust.
 
-This repository also includes an ncw to wav conversion cli tool, `ncw-decode`.
+This repository also includes an ncw to wav conversion cli tool, `ncw-convert`.
 
 ## Requirements
 
-- Rust 1.50 or higher
+- Rust 1.58 or higher
 
 ## Usage
 
 ```rust
+use ncw::{NcwReader, SampleFormat};
+
 let input = File::open(&args[1])?;
-let mut ncw = NcwReader::read(&input)?;
+let mut ncw = NcwReader::read(input)?;
 
 println!("channels: {}", ncw.header.channels);
 println!("sample_rate: {}", ncw.header.sample_rate);
 println!("bits_per_sample: {}", ncw.header.bits_per_sample);
 
+// Samples are interleaved i32. PCM files give sign-extended integers at the
+// file's bit depth; float files give raw f32 bit patterns.
 for sample in ncw.decode_samples()? {
-	// save or convert each sample into a file or stream
-	dbg!(sample);
+    match ncw.sample_format {
+        SampleFormat::Pcm => println!("{sample}"),
+        SampleFormat::Float => println!("{}", f32::from_bits(sample as u32)),
+    }
 }
 ```
 
