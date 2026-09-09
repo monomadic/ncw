@@ -1,21 +1,11 @@
 [workspace]
 resolver = "2"
-members = [".", "examples/ncw-convert"]
+members = ["crates/ncw", "crates/ncw-convert"]
 
 [workspace.package]
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/monomadic/ncw"
-
-[package]
-name = "ncw"
-description = "Native Instruments NCW audio file format support"
 version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/monomadic/ncw"
 authors = ["monomadic <themonomadic@protonmail.com>"]
-readme = "README.md"
-homepage = "https://github.com/monomadic/ncw"
-keywords = ["audio", "decompression", "kontakt", "file-formats"]
-categories = ["encoding", "multimedia::encoding", "multimedia::audio", "compression"]
-license.workspace = true
-repository.workspace = true

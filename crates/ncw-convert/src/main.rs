@@ -67,7 +67,7 @@ mod tests {
 
     fn convert(name: &str) -> Vec<u8> {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/data")
+            .join("../ncw/tests/data")
             .join(name);
         let mut ncw = NcwReader::read(File::open(path).unwrap()).unwrap();
         let mut buffer = Cursor::new(Vec::new());

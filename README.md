@@ -5,64 +5,48 @@
 <a href="https://docs.rs/ncw" rel="nofollow noopener noreferrer"><img src="https://img.shields.io/docsrs/ncw" alt="docs.rs"></a>
 </p>
 
-## Description
+NCW (Native Instruments Compressed Wave) is the lossless audio container used by Kontakt libraries. It is essentially DPCM plus bit truncation, with optional mid/side stereo. This repository is part of a [wider reverse engineering effort](https://github.com/open-sound) of proprietary audio formats and backs the NCW support in [ni-file](https://github.com/monomadic/ni-file).
 
-NCW (Native Instruments Compressed Wave) is a lossless compression algorithm developed by Native Instruments which is essentially DPCM and bit truncation.
+| Crate | What it is |
+|---|---|
+| [`crates/ncw`](crates/ncw) | Zero-dependency decoder library ([docs.rs](https://docs.rs/ncw)) |
+| [`crates/ncw-convert`](crates/ncw-convert) | `ncw-convert <INPUT> <OUTPUT>` command-line NCW to WAV converter |
 
-This library is a zero-dependency Rust-based library to decode NCW files. It serves as part of a [wider reverse engineering effort](https://github.com/open-sound) of proprietary audio formats, and this particular library is used in [ni-file](https://github.com/monomadic/ni-file), a library for Native Instruments file formats support in rust.
+Format notes, including what is known and what is still guessed, live in [FORMAT.md](FORMAT.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
 
-This repository also includes an ncw to wav conversion cli tool, `ncw-convert`.
-
-## Requirements
-
-- Rust 1.85 or higher (edition 2024)
-
-## Usage
-
-```rust,no_run
-use ncw::{NcwReader, SampleFormat};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let input = std::fs::File::open("sample.ncw")?;
-    let mut ncw = NcwReader::read(input)?;
-
-    println!("channels: {}", ncw.header.channels);
-    println!("sample_rate: {}", ncw.header.sample_rate);
-    println!("bits_per_sample: {}", ncw.header.bits_per_sample);
-
-    // Samples are interleaved i32 in plain channel order; mid/side encoded
-    // blocks are converted to left/right for you. PCM files give
-    // sign-extended integers at the file's bit depth; float files give raw
-    // f32 bit patterns.
-    for sample in ncw.decode_samples()? {
-        match ncw.sample_format {
-            SampleFormat::Pcm => println!("{sample}"),
-            SampleFormat::Float => println!("{}", f32::from_bits(sample as u32)),
-        }
-    }
-    Ok(())
-}
-```
-
-## Utility (ncw-convert)
-
-To install the cli utility, you can use cargo:
+## Quick start
 
 ```bash
 cargo install ncw-convert
+ncw-convert sample.ncw sample.wav
 ```
 
-### Usage
+Library usage is documented in the [crate README](crates/ncw/README.md).
 
-Run the program with the following command-line arguments:
+## Help wanted
+
+The decoder is verified sample-for-sample against reference WAVs for every fixture in `crates/ncw/tests/data`, but those fixtures only exercise part of the format. Several code paths are currently covered by synthetic files that follow the documented formulas rather than by real Kontakt output. If you can produce any of the following from a library you own, please open an issue or pull request with the `.ncw` and, where possible, the original `.wav` it was made from:
+
+1. **A mid/side encoded stereo file.** Block header flag bit 0. This is the most important gap: the left = mid + side, right = mid − side reconstruction has never been checked against real data. Wide stereo material such as pads or reverb tails is the most likely to trigger this encoding.
+2. **A reference WAV for `24-bit-stereo.ncw`.** The file decodes, but with no original to compare against its test only checks the sample count.
+3. **A file with uncompressed blocks.** Block header `bits == 0`, meaning samples are stored raw at the file's bit depth. Noise or very dense material is the most likely source.
+4. **An 8-bit file**, if Kontakt can produce one at all.
+5. **A file with more than two channels**, to learn how (or whether) mid/side and block layout apply beyond stereo.
+6. **A file with the alternate signature** `01 A8 9E D6 30 01 00 00`. Both signatures are accepted, but only `31` has been seen.
+7. **Blocks truncated to a width of 8 or more that is not a multiple of 8**, for example 12-bit. The unpacker handles any width, but real files have only shown widths under 8 or exactly 8, 16, 24, 32.
+
+Fixtures do not need to be long: a few thousand samples is enough, and the decoder pads the last block anyway.
+
+## Development
 
 ```bash
-ncw-convert <INPUT> <OUTPUT>
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all --check
 ```
 
-- `<INPUT>`: Path to the input NCW file.
-- `<OUTPUT>`: Path where the output WAV file will be saved.
+The minimum supported Rust version is 1.85 (edition 2024) and is checked in CI.
 
-## Contribution
+## License
 
-To contribute, create a pull request with your proposed changes.
+MIT OR Apache-2.0

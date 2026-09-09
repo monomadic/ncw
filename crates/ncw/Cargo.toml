@@ -1,0 +1,13 @@
+[package]
+name = "ncw"
+description = "Native Instruments NCW audio file format support"
+readme = "README.md"
+homepage = "https://github.com/monomadic/ncw"
+keywords = ["audio", "decompression", "kontakt", "file-formats"]
+categories = ["encoding", "multimedia::encoding", "multimedia::audio", "compression"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
