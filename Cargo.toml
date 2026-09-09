@@ -11,6 +11,7 @@ name = "ncw"
 description = "Native Instruments NCW audio file format support"
 version = "0.1.2"
 edition = "2021"
+rust-version = "1.58"
 authors = ["monomadic <themonomadic@protonmail.com>"]
 readme = "README.md"
 homepage = "https://github.com/monomadic/ncw"
