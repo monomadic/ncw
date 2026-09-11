@@ -28,7 +28,8 @@ data_offset  blocks             data_size bytes
 | 20 | 4 | blocks offset | always 120 so far |
 | 24 | 4 | data offset | `blocks_offset + 4 × (blocks + 1)` |
 | 28 | 4 | data size | equals the last table entry and `file length − data_offset` in every fixture |
-| 32 | 88 | unknown | zero in every fixture |
+| 32 | 4 | unknown | 1 in both float fixtures, 0 in every PCM fixture. Possibly a format flag; the decoder ignores it and trusts the block flags. |
+| 36 | 84 | source name | UTF-16LE, zero padded. One fixture holds the original filename (`1_04skank_0_127_AB01.wav`), the rest are empty. Ignored by the decoder. |
 
 ## Block offset table
 
@@ -65,13 +66,17 @@ every stereo fixture in this repository.
   sample. The 512th delta is consumed but its result is never emitted.
   Verified against reference WAVs across hundreds of blocks.
 * `bits < 0`: bit truncated. The body holds 512 raw samples of `|bits|` width,
-  sign-extended. Verified for 16 and 32 bit widths.
+  sign-extended. Only −16 and −32 have been seen. `base_value` is still
+  populated in these blocks (818 of 821 are non-zero, presumably the first
+  sample) but is not needed to decode them.
 * `bits == 0`: raw samples at the file's bit depth. Never seen in real output;
   covered by synthetic tests only.
 
 Values are packed LSB-first: the first value occupies the low bits of the first
-byte. Widths that are not a multiple of 8 have been seen only below 8 bits
-(delta blocks), but the unpacker accepts 1 to 32.
+byte. Delta widths are chosen freely: every width from 2 to 24 plus 26 occurs
+across the fixtures, so non-byte-multiple widths above 8 are normal. Truncated
+widths have only been seen at byte multiples. The unpacker accepts 1 to 32 for
+both.
 
 ### `flags`
 
@@ -84,8 +89,12 @@ Mid/side reconstruction is `left = mid + side`, `right = mid − side`, using
 wrapping integer arithmetic for PCM and float arithmetic for float files. The
 encoder is understood to store `mid = (l + r) / 2` and `side = (l − r) / 2`.
 **This has not been verified against a real file**, as no fixture sets bit 0.
-The flag is per sub-block; the decoder treats a block as mid/side if either of
-its two sub-blocks sets it, and rejects the flag on files that are not stereo.
+Note that the formula as stated cannot be lossless when `l + r` is odd (left 3,
+right 0 gives mid 1, side 1, which decodes to left 2), so either the encoder
+only uses it when parity allows or the real scheme carries the low bit
+somewhere. A real mid/side file would settle this. The flag is per sub-block;
+the decoder treats a block as mid/side if either of its two sub-blocks sets it,
+and rejects the flag on files that are not stereo.
 
 Delta coding operates on the raw sample or bit pattern regardless of format, so
 float files are delta coded on their integer representation. Verified against

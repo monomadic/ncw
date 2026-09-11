@@ -33,7 +33,7 @@ The decoder is verified sample-for-sample against reference WAVs for every fixtu
 4. **An 8-bit file**, if Kontakt can produce one at all.
 5. **A file with more than two channels**, to learn how (or whether) mid/side and block layout apply beyond stereo.
 6. **A file with the alternate signature** `01 A8 9E D6 30 01 00 00`. Both signatures are accepted, but only `31` has been seen.
-7. **Blocks truncated to a width of 8 or more that is not a multiple of 8**, for example 12-bit. The unpacker handles any width, but real files have only shown widths under 8 or exactly 8, 16, 24, 32.
+7. **Truncated blocks at widths other than 16 and 32.** Delta blocks use every width from 2 to 26, but truncated blocks (negative `bits`) have only been seen at −16 and −32. An 8-bit or 24-bit file compressed by Kontakt would probably show −8 or −24.
 
 Fixtures do not need to be long: a few thousand samples is enough, and the decoder pads the last block anyway.
 
