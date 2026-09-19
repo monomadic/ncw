@@ -11,6 +11,7 @@
 * Packages moved to `crates/ncw` and `crates/ncw-convert`.
 
 ### Fixed
+* First-channel flag selects mid/side, matching controlled Kontakt 8.9.0 probes.
 * Mid/side encoded blocks are converted to left/right. Previously the stored
   mid and side channels were returned as if they were left and right.
 * Header fields are validated on read: channel count, bits per sample, and
@@ -20,6 +21,11 @@
 * The sample format flag is checked on every block, not only the first.
 
 ### Added
+* PCM16/24 mono/stereo writer, automatic/direct/forced mid-side modes, template-based
+  byte-identical reconstruction and CLI `encode`/`roundtrip` commands.
+* Independent Kontakt validation on three private commercial fixtures; evidence in
+  `WRITER_VALIDATION.md`. One-bit delta encoding excluded after a failed live probe.
+* CLI accepts Kontakt's observed 20-byte PCM fmt chunk and refuses existing outputs.
 * `SAMPLES_PER_BLOCK` is exported.
 * In-memory synthetic fixtures covering mid/side (PCM and float), raw
   `bits == 0` blocks at every depth, delta blocks, and several rejection cases.

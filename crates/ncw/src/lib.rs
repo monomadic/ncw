@@ -11,3 +11,6 @@ pub use self::block::{BlockHeader, ChannelEncoding, SAMPLES_PER_BLOCK, SampleFor
 pub use self::error::NcwError;
 pub use self::header::NcwHeader;
 pub use self::reader::NcwReader;
+
+mod writer;
+pub use writer::{PcmSpec, StereoMode, encode_pcm, encode_pcm_with_template, write_pcm};

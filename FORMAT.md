@@ -29,7 +29,7 @@ data_offset  blocks             data_size bytes
 | 24 | 4 | data offset | `blocks_offset + 4 × (blocks + 1)` |
 | 28 | 4 | data size | equals the last table entry and `file length − data_offset` in every fixture |
 | 32 | 4 | unknown | 1 in both float fixtures, 0 in every PCM fixture. Possibly a format flag; the decoder ignores it and trusts the block flags. |
-| 36 | 84 | source name | UTF-16LE, zero padded. One fixture holds the original filename (`1_04skank_0_127_AB01.wav`), the rest are empty. Ignored by the decoder. |
+| 36 | 84 | opaque bytes | One repository fixture contains a UTF-16LE filename; later live Kontakt outputs contain varying non-text bytes. Not a universal source-name field. Template writer preserves these bytes. |
 
 ## Block offset table
 
@@ -88,14 +88,35 @@ both.
 Mid/side reconstruction is `left = mid + side`, `right = mid − side`, using
 wrapping integer arithmetic for PCM and float arithmetic for float files. The
 encoder is understood to store `mid = (l + r) / 2` and `side = (l − r) / 2`.
-**This has not been verified against a real file**, as no fixture sets bit 0.
-Note that the formula as stated cannot be lossless when `l + r` is odd (left 3,
-right 0 gives mid 1, side 1, which decodes to left 2), so either the encoder
-only uses it when parity allows or the real scheme carries the low bit
-somewhere. A real mid/side file would settle this. The flag is per sub-block;
-the decoder treats a block as mid/side if either of its two sub-blocks sets it,
-and rejects the flag on files that are not stereo.
+Three private PCM16/24 natural files now match Kontakt 8.9.0's decoded PCM
+exactly with this inverse; their authoring builds are unknown. This does not
+validate float mid/side. Opposite-parity L/R pairs cannot be represented by this
+integer inverse, so the fresh writer falls back to direct encoding (or rejects
+forced mid/side). No low-bit correction is invented.
+
+Controlled Kontakt probes with flags 00, 10, 01 and 11 observed that the **first
+channel's flag** selects the transform; the reader follows that behavior. Mono
+mid/side is rejected. Evidence is described in [WRITER_VALIDATION.md](WRITER_VALIDATION.md).
 
 Delta coding operates on the raw sample or bit pattern regardless of format, so
 float files are delta coded on their integer representation. Verified against
 the two float fixtures.
+
+## Writer boundaries
+
+Fresh PCM16/24 encoding chooses delta blocks at widths 2..native-depth-minus-one,
+otherwise native-depth raw blocks (`bits == 0`). It compares direct and exactly
+representable sum/difference payload costs, preferring direct on a tie. Padding
+repeats the last stored sample and the final delta is zero. These are this
+writer's choices, not a claim about NI's encoder policy.
+
+A one-bit-delta trial passed this decoder but mismatched Kontakt on 2,158 PCM16
+sample values; a minimum width of two eliminated those mismatches on the tested
+fixtures. Width-one semantics remain unresolved; template writing rejects them.
+
+Template writing also handles negative raw widths, preserves opaque header and
+block fields, table-prefix bytes, unused terminal deltas, final padded samples
+and trailing bytes. It reconstructs all active payload values from PCM and checks
+strict table/sentinel/boundary consistency. Original NCW bytes are needed as the
+template: WAV alone cannot supply all of those details. Width/flag selection is
+preserved rather than reverse-engineered by a successful template roundtrip.

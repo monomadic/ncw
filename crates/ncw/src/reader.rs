@@ -101,12 +101,14 @@ impl<R: Read + Seek> NcwReader<R> {
             ))?;
 
             let mut mid_side = false;
-            for channel in channels.iter_mut() {
+            for (channel_index, channel) in channels.iter_mut().enumerate() {
                 let block_header = BlockHeader::read(&mut self.reader)?;
                 if block_header.sample_format() != self.sample_format {
                     return Err(Error::InvalidHeader("sample format changes between blocks"));
                 }
-                mid_side |= block_header.channel_encoding() == ChannelEncoding::MidSide;
+                if channel_index == 0 {
+                    mid_side = block_header.channel_encoding() == ChannelEncoding::MidSide;
+                }
                 read_block(&mut self.reader, &self.header, &block_header, channel)?;
             }
 
