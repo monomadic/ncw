@@ -138,3 +138,13 @@ others remain fixed. Copied process-state/scratch contents are a hypothesis only
 no pointer mapping or uninitialized-memory claim has been established. The register
 proposes repeated exports, filename/session controls, isolated mutations and tracing
 the actual 120-byte header write. Tool: `just ncw-header-audit` in ni-file-sources.
+
+### Width 0/1 follow-up (2026-09-20)
+
+Minimal Kontakt probes now show history-dependent results: three identical-input
+pairs produced different middle-block PCM while valid surrounding blocks decoded
+exactly. Some output repeated previous controls. This favors an unsupported/skipped
+branch leaving stale output over a newly inferred sample encoding, but does not prove
+that mechanism. API success is not evidence of validity. Keep writer rejection and
+trace width dispatch next; do not assign silence or constant semantics from zero
+output. Evidence and scope: [B1/B2 register](../ni-file-reference/other/NCW-unknowns.md#b1b2-minimal-probe-result-2026-09-20).

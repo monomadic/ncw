@@ -15,3 +15,7 @@ in ../ni-file-sources/TODO.md. See WRITER_VALIDATION.md before repeating experim
 
 - [ ] Follow the canonical unknown-field experiments in
   ../ni-file-reference/other/NCW-unknowns.md; promote behavior only with named evidence.
+
+- [ ] Investigate strict reader rejection of unvalidated widths 0/1 after tracing
+  NI dispatch: minimal live probes produced history-dependent PCM, while the current
+  reader still implements historical hypotheses. Do not silently treat them as validated.
