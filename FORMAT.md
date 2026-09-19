@@ -57,7 +57,7 @@ every stereo fixture in this repository.
 | 4 | 4 | base value (signed) |
 | 8 | 2 | bits (signed) |
 | 10 | 2 | flags |
-| 12 | 4 | reserved, zero |
+| 12 | 4 | unknown; zero in repository fixtures, semantics unverified |
 
 ### `bits`
 
@@ -66,7 +66,8 @@ every stereo fixture in this repository.
   sample. The 512th delta is consumed but its result is never emitted.
   Verified against reference WAVs across hundreds of blocks.
 * `bits < 0`: bit truncated. The body holds 512 raw samples of `|bits|` width,
-  sign-extended. Only −16 and −32 have been seen. `base_value` is still
+  sign-extended. Repository fixtures show −16 and −32; later live PCM24 probes
+  also validate −24. `base_value` is still
   populated in these blocks (818 of 821 are non-zero, presumably the first
   sample) but is not needed to decode them.
 * `bits == 0`: the reader historically interprets this as raw samples at the
@@ -122,3 +123,18 @@ and trailing bytes. It reconstructs all active payload values from PCM and check
 strict table/sentinel/boundary consistency. Original NCW bytes are needed as the
 template: WAV alone cannot supply all of those details. Width/flag selection is
 preserved rather than reverse-engineered by a successful template roundtrip.
+
+## Unresolved fields and reverse-engineering plan
+
+The canonical [unknown-field register](../ni-file-reference/other/NCW-unknowns.md)
+records offsets, observations, hypotheses, controls and completion criteria.
+It covers the 0x20 word, opaque 0x24..0x77 region, widths 0/1, the channel-header
+unknown word and raw base, flag combinations, terminal deltas/padding and encoder
+selection. Use it instead of inferring field meaning from template preservation.
+
+A bounded audit of two same-audio Kontakt outputs found correlated address-shaped
+u64 groups in the opaque region: some change together while preserving offsets,
+others remain fixed. Copied process-state/scratch contents are a hypothesis only;
+no pointer mapping or uninitialized-memory claim has been established. The register
+proposes repeated exports, filename/session controls, isolated mutations and tracing
+the actual 120-byte header write. Tool: `just ncw-header-audit` in ni-file-sources.

@@ -12,3 +12,6 @@
 
 Format research belongs in ../ni-file-reference/TODO.md and source preservation
 in ../ni-file-sources/TODO.md. See WRITER_VALIDATION.md before repeating experiments.
+
+- [ ] Follow the canonical unknown-field experiments in
+  ../ni-file-reference/other/NCW-unknowns.md; promote behavior only with named evidence.
