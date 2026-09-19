@@ -126,3 +126,21 @@ fn one_bit_delta_encoding_is_avoided() {
         2
     );
 }
+
+#[test]
+fn raw_fallback_uses_kontakt_negative_full_depth() {
+    for depth in [16, 24] {
+        let limit = 1 << (depth - 1);
+        let pcm = vec![-limit, -limit, limit - 1, limit - 1];
+        let bytes = encode_pcm(&pcm, spec(depth), StereoMode::Direct).unwrap();
+        let start = u32::from_le_bytes(bytes[24..28].try_into().unwrap()) as usize;
+        assert_eq!(
+            i16::from_le_bytes(bytes[start + 8..start + 10].try_into().unwrap()),
+            -(depth as i16)
+        );
+        assert_eq!(decode(&bytes), pcm);
+        let mut zero_width = bytes.clone();
+        zero_width[start + 8..start + 10].copy_from_slice(&0i16.to_le_bytes());
+        assert!(encode_pcm_with_template(&pcm, spec(depth), &zero_width).is_err());
+    }
+}

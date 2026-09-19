@@ -54,7 +54,7 @@ Pull requests are welcome. If you have Kontakt libraries at hand, the most valua
 PCM16/24. `write_pcm` writes those bytes to a `Write` stream.
 `encode_pcm_with_template(samples, spec, original_bytes)` preserves original
 encoding metadata while rebuilding the active sample payload. It validates table
-framing, rejects unsupported flags/one-bit delta blocks, and errors if replacement
+framing, rejects unsupported flags/zero-width or one-bit delta blocks, and errors if replacement
 PCM cannot fit the original block widths or exact sum/difference transform.
 See the repository's `WRITER_VALIDATION.md` for independent Kontakt evidence and
 remaining coverage limits. Float writing is not implemented.

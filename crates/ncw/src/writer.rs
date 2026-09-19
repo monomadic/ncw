@@ -197,13 +197,13 @@ pub fn encode_pcm(samples: &[i32], spec: PcmSpec, mode: StereoMode) -> Result<Ve
                 let bits = if w < spec.bits_per_sample as usize {
                     w as i16
                 } else {
-                    0
+                    -(spec.bits_per_sample as i16)
                 };
                 group.extend(channel_block(
                     c,
                     bits,
                     flag,
-                    if bits > 0 { c[0] } else { 0 },
+                    c[0],
                     0,
                     spec.bits_per_sample,
                     0,
@@ -286,9 +286,9 @@ pub fn encode_pcm_with_template(
         for c in &mut cs {
             let pos = cursor.position() as usize;
             let bh = BlockHeader::read(&mut cursor)?;
-            if bh.bits == 1 {
+            if matches!(bh.bits, 0 | 1) {
                 return Err(invalid(
-                    "width-1 semantics are not validated for template writing",
+                    "zero/one-bit semantics are not validated for template writing",
                 ));
             }
             if bh.flags > 1 {

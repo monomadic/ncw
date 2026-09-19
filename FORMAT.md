@@ -69,8 +69,10 @@ every stereo fixture in this repository.
   sign-extended. Only −16 and −32 have been seen. `base_value` is still
   populated in these blocks (818 of 821 are non-zero, presumably the first
   sample) but is not needed to decode them.
-* `bits == 0`: raw samples at the file's bit depth. Never seen in real output;
-  covered by synthetic tests only.
+* `bits == 0`: the reader historically interprets this as raw samples at the
+  file's bit depth. This is not validated: expanded live tests produced incorrect
+  Kontakt PCM for newly generated zero-width blocks. Writing rejects this value;
+  actual semantics remain unresolved.
 
 Values are packed LSB-first: the first value occupies the low bits of the first
 byte. Delta widths are chosen freely: every width from 2 to 24 plus 26 occurs
@@ -105,14 +107,14 @@ the two float fixtures.
 ## Writer boundaries
 
 Fresh PCM16/24 encoding chooses delta blocks at widths 2..native-depth-minus-one,
-otherwise native-depth raw blocks (`bits == 0`). It compares direct and exactly
+otherwise negative native-depth raw blocks (`bits == -16` or `-24`). It compares direct and exactly
 representable sum/difference payload costs, preferring direct on a tie. Padding
 repeats the last stored sample and the final delta is zero. These are this
 writer's choices, not a claim about NI's encoder policy.
 
 A one-bit-delta trial passed this decoder but mismatched Kontakt on 2,158 PCM16
 sample values; a minimum width of two eliminated those mismatches on the tested
-fixtures. Width-one semantics remain unresolved; template writing rejects them.
+fixtures. Width-one semantics remain unresolved; template writing rejects them and zero-width blocks.
 
 Template writing also handles negative raw widths, preserves opaque header and
 block fields, table-prefix bytes, unused terminal deltas, final padded samples

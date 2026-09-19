@@ -11,6 +11,9 @@
 * Packages moved to `crates/ncw` and `crates/ncw-convert`.
 
 ### Fixed
+* Fresh raw blocks use negative full depth (-16/-24), not the unvalidated zero-width
+  representation. Expanded independent Kontakt tests exposed the old choice;
+  template writing now rejects zero-width blocks too.
 * First-channel flag selects mid/side, matching controlled Kontakt 8.9.0 probes.
 * Mid/side encoded blocks are converted to left/right. Previously the stored
   mid and side channels were returned as if they were left and right.

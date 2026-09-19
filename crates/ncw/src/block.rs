@@ -99,7 +99,8 @@ pub(crate) fn read_block<R: Read>(
             out.extend(packed_values(&data, bits));
         }
         std::cmp::Ordering::Equal => {
-            // Uncompressed at the file's native bit depth (validated on read).
+            // Legacy zero-width interpretation. Synthetic tests only: Kontakt
+            // rejected this writer representation in live probes. Do not emit it.
             let bytes_per_sample = header.bits_per_sample as usize / 8;
             let data = reader.read_bytes(bytes_per_sample * SAMPLES_PER_BLOCK)?;
             out.extend(data.chunks_exact(bytes_per_sample).map(|chunk| {
