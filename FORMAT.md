@@ -148,3 +148,13 @@ branch leaving stale output over a newly inferred sample encoding, but does not 
 that mechanism. API success is not evidence of validity. Keep writer rejection and
 trace width dispatch next; do not assign silence or constant semantics from zero
 output. Evidence and scope: [B1/B2 register](../ni-file-reference/other/NCW-unknowns.md#b1b2-minimal-probe-result-2026-09-20).
+
+### Static dispatch follow-up (2026-09-21)
+
+The pinned Kontakt ARM64 optimized PCM branch dispatches widths 0/1 straight to an
+exit path which performs no destination writes. This gives a concrete mechanism
+consistent with the earlier history-dependent outputs. The selector must be enabled
+and the float flag clear; fallback behavior and actual runtime selection were not
+traced. See [addresses, predicates and evidence](../ni-file-reference/other/NCW-width-dispatch.md).
+Writer rejection remains; this is not a new special encoding or proof of every
+Kontakt version's behavior.
