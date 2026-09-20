@@ -19,3 +19,9 @@ in ../ni-file-sources/TODO.md. See WRITER_VALIDATION.md before repeating experim
 - [ ] Investigate strict reader rejection of unvalidated widths 0/1 after tracing
   NI dispatch: minimal live probes produced history-dependent PCM, while the current
   reader still implements historical hypotheses. Do not silently treat them as validated.
+
+- [ ] Decide how the reader and CLI should honor main-header format bit 0 and
+  version 0x130 independently of block float flags; current inference can export
+  a different WAV type from Kontakt on contradictory headers. Use the 40-case
+  matrix in ../ni-file-reference/other/NCW-field-probes.md, including exact numeric
+  conversion expectations, before changing behavior.

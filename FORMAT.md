@@ -28,7 +28,7 @@ data_offset  blocks             data_size bytes
 | 20 | 4 | blocks offset | always 120 so far |
 | 24 | 4 | data offset | `blocks_offset + 4 × (blocks + 1)` |
 | 28 | 4 | data size | equals the last table entry and `file length − data_offset` in every fixture |
-| 32 | 4 | unknown | 1 in both float fixtures, 0 in every PCM fixture. Possibly a format flag; the decoder ignores it and trusts the block flags. |
+| 32 | 4 | sample-format word | Kontakt uses bit 0 for 32-bit output type in tested version 0x131; 0x130 ignores it. Block flags separately select payload interpretation. Current Rust decoder still ignores this word. See field probes below. |
 | 36 | 84 | opaque bytes | One repository fixture contains a UTF-16LE filename; later live Kontakt outputs contain varying non-text bytes. Not a universal source-name field. Template writer preserves these bytes. |
 
 ## Block offset table
@@ -139,8 +139,17 @@ natural files preserved exact Kontakt PCM and WAV format chunks. See the
 for addresses, hashes and limits. This explains a mechanism for incidental header
 contents in that build; it does not establish a universal historical schema.
 Fresh writing continues to use deterministic zeros; templates preserve original
-bytes. The writer also derives word 0x20 from a float-source boolean, but reader
-precedence relative to block flags remains unresolved.
+bytes. The writer derives word 0x20 from a float-source boolean.
+
+Follow-up [field probes](../ni-file-reference/other/NCW-field-probes.md) establish
+separate roles: header bit 0 selects 32-bit output type (except version 0x130),
+while block bit 1 controls sample interpretation. All 40 format cases match exact
+expected output. Our reader currently infers format from block flags alone, so
+contradictory headers can produce a different output type from Kontakt. This is
+a documented compatibility gap, not a change to codec behavior in this pass.
+Another 22 probes establish unchanged PCM for block-word +0x0c mutations in
+mono PCM16/24 raw/delta blocks, and base mutations in the raw variants. Extend
+coverage before applying those conclusions to every representation.
 
 ### Width 0/1 follow-up (2026-09-20)
 
