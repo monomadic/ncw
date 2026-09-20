@@ -132,12 +132,15 @@ It covers the 0x20 word, opaque 0x24..0x77 region, widths 0/1, the channel-heade
 unknown word and raw base, flag combinations, terminal deltas/padding and encoder
 selection. Use it instead of inferring field meaning from template preservation.
 
-A bounded audit of two same-audio Kontakt outputs found correlated address-shaped
-u64 groups in the opaque region: some change together while preserving offsets,
-others remain fixed. Copied process-state/scratch contents are a hypothesis only;
-no pointer mapping or uninitialized-memory claim has been established. The register
-proposes repeated exports, filename/session controls, isolated mutations and tracing
-the actual 120-byte header write. Tool: `just ncw-header-audit` in ni-file-sources.
+The pinned Kontakt ARM64 writer leaves header bytes 0x24..0x77 uninitialized,
+then writes all 120 bytes. Six controlled zero/0xa5 replacements across three
+natural files preserved exact Kontakt PCM and WAV format chunks. See the
+[header construction evidence](../ni-file-reference/other/NCW-header-write.md)
+for addresses, hashes and limits. This explains a mechanism for incidental header
+contents in that build; it does not establish a universal historical schema.
+Fresh writing continues to use deterministic zeros; templates preserve original
+bytes. The writer also derives word 0x20 from a float-source boolean, but reader
+precedence relative to block flags remains unresolved.
 
 ### Width 0/1 follow-up (2026-09-20)
 
