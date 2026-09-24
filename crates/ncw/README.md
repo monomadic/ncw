@@ -9,9 +9,9 @@
 
 NCW (Native Instruments Compressed Wave) is a lossless compression algorithm developed by Native Instruments which is essentially DPCM and bit truncation.
 
-This library is a zero-dependency Rust-based library to decode NCW files. It serves as part of a [wider reverse engineering effort](https://github.com/open-sound) of proprietary audio formats, and this particular library is used in [ni-file](https://github.com/monomadic/ni-file), a library for Native Instruments file formats support in rust.
+This is a zero-dependency Rust library to decode NCW files and to write mono/stereo PCM16/24 NCW files. It is part of a [wider reverse engineering effort](https://github.com/open-sound) of proprietary audio formats.
 
-The repository also ships `ncw-convert`, a command-line NCW to WAV converter built on this crate.
+The repository also ships [`ncw-convert`](https://crates.io/crates/ncw-convert), a command-line NCW/WAV converter built on this crate.
 
 ## Requirements
 
@@ -44,10 +44,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## Contribution
-
-Pull requests are welcome. If you have Kontakt libraries at hand, the most valuable contribution right now is test material: see the *Help wanted* section of the [repository README](https://github.com/monomadic/ncw#help-wanted).
-
 ## Writing PCM
 
 `encode_pcm(samples, PcmSpec, StereoMode)` returns NCW bytes for mono/stereo
@@ -58,3 +54,7 @@ framing, rejects unsupported flags/zero-width or one-bit delta blocks, and error
 PCM cannot fit the original block widths or exact sum/difference transform.
 See the repository's `WRITER_VALIDATION.md` for independent Kontakt evidence and
 remaining coverage limits. Float writing is not implemented.
+
+## Contribution
+
+Pull requests are welcome. If you have Kontakt libraries at hand, the most valuable contribution right now is test material: see the *Help wanted* section of the [repository README](https://github.com/monomadic/ncw#help-wanted).

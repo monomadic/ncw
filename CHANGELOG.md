@@ -9,6 +9,8 @@
 * Independent Kontakt validation on three private commercial fixtures; evidence in
   `WRITER_VALIDATION.md`. One-bit delta encoding excluded after a failed live probe.
 * CLI accepts Kontakt's observed 20-byte PCM fmt chunk and refuses existing outputs.
+* CLI `--version`; bad arguments print usage to stderr and exit with status 2 instead
+  of a Debug-formatted error.
 
 ### Fixed
 * Fresh raw blocks use negative full depth (-16/-24), not the unvalidated zero-width

@@ -1,56 +1,76 @@
-# Native Instruments NCW Audio File Format
+# ncw-convert
 
 <p>
-<a href="https://crates.io/crates/ncw" rel="nofollow noopener noreferrer"><img src="https://img.shields.io/crates/v/ncw.svg" alt="crates.io"></a>
-<a href="https://docs.rs/ncw" rel="nofollow noopener noreferrer"><img src="https://img.shields.io/docsrs/ncw" alt="docs.rs"></a>
+<a href="https://crates.io/crates/ncw-convert" rel="nofollow noopener noreferrer"><img src="https://img.shields.io/crates/v/ncw-convert.svg" alt="crates.io"></a>
 </p>
 
 ## Description
 
-NCW (Native Instruments Compressed Wave) is a lossless compression algorithm developed by Native Instruments which is essentially DPCM and bit truncation.
+NCW (Native Instruments Compressed Wave) is the lossless audio container used by
+Kontakt libraries. It is essentially DPCM plus bit truncation, with optional
+mid/side stereo.
 
-This is a cli frontend to the [ncw crate](https://github.com/monomadic/ncw) which decode NCW files into standard WAV files. It serves as part of a wider reverse engineering effort of proprietary audio formats, and this particular library is used in [ni-file](https://github.com/monomadic/ni-file).
+This is a command-line frontend to the [ncw crate](https://crates.io/crates/ncw)
+that decodes NCW files to standard WAV files, encodes PCM WAV files to NCW, and
+performs byte-identical template roundtrips. It is part of a
+[wider reverse engineering effort](https://github.com/open-sound) of proprietary
+audio formats.
 
 ## Installation
-
-To install the cli utility, you can use cargo:
 
 ```bash
 cargo install ncw-convert
 ```
 
-### Usage
+## Usage
 
-Run the program with the following command-line arguments:
-
-```bash
-ncw-convert <INPUT> <OUTPUT>
+```
+ncw-convert <INPUT.ncw> <OUTPUT.wav>
+ncw-convert decode <INPUT.ncw> <OUTPUT.wav>
+ncw-convert encode <INPUT.wav> <OUTPUT.ncw> [--mode auto|direct|mid-side | --template ORIGINAL.ncw]
+ncw-convert roundtrip <INPUT.ncw> <OUTPUT.ncw>
 ```
 
-- `<INPUT>`: Path to the input NCW file.
-- `<OUTPUT>`: Path where the output WAV file will be saved.
+`--help` prints this usage and `--version` prints the installed version.
+Existing output files are never overwritten.
 
-## Encoding (working-tree version)
+### Decoding
+
+```sh
+ncw-convert sample.ncw sample.wav
+ncw-convert decode sample.ncw sample.wav
+```
+
+PCM sources produce integer WAVs at the file's bit depth; float sources produce
+32-bit float WAVs.
+
+### Encoding
 
 ```sh
 ncw-convert encode input.wav output.ncw
 ncw-convert encode input.wav output.ncw --mode direct
 ncw-convert encode input.wav output.ncw --mode mid-side
+```
+
+Writing supports mono/stereo integer PCM16/24 only. Automatic mode chooses a
+smaller exactly representable mid/side encoding, otherwise direct channels.
+Forced mid/side rejects opposite-parity L/R pairs rather than rounding. Kontakt's
+20-byte PCM `fmt ` chunk variant is accepted. Fresh encoding promises lossless
+PCM, not byte identity with NI's encoder.
+
+### Template roundtrips
+
+```sh
 ncw-convert roundtrip original.ncw rebuilt.ncw
 ncw-convert encode decoded.wav rebuilt.ncw --template original.ncw
 ```
 
-The legacy two-argument command still decodes NCW to WAV; `decode INPUT OUTPUT`
-is also accepted. Existing outputs are never overwritten. Build this checkout
-with `cargo build -p ncw-convert`; these commands are not claimed to be published.
+`roundtrip` decodes to PCM and regenerates the NCW using the original's encoding
+metadata, then requires byte identity before writing. `encode --template` does
+the same reconstruction from a supplied WAV; parameters and deltas must fit the
+template. Active compressed payloads are never copied: the template supplies
+otherwise lost headers, block choices, terminal deltas and tail padding.
 
-Writing supports mono/stereo integer PCM16/24 only. Automatic mode chooses a
-smaller exactly representable mid/side encoding, otherwise direct channels.
-Forced mid/side rejects opposite-parity L/R pairs rather than rounding.
-
-`roundtrip` decodes to PCM and regenerates the NCW using original encoding metadata,
-then requires byte identity before writing. `encode --template` does the same
-reconstruction from a supplied WAV; parameters and deltas must fit the template.
-It does not copy active compressed payloads. The template supplies otherwise lost
-headers, block choices, terminal deltas and tail padding. Ordinary fresh encoding
-promises lossless PCM, not byte identity. Float/8-bit/32-bit writing is unsupported.
+Float, 8-bit and 32-bit integer writing are unsupported. See the repository's
+[WRITER_VALIDATION.md](https://github.com/monomadic/ncw/blob/master/WRITER_VALIDATION.md)
+for independent Kontakt evidence and remaining limits.

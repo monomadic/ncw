@@ -63,11 +63,24 @@ fn read_pcm(path: &str) -> Result<(Vec<i32>, ncw::PcmSpec), Box<dyn Error>> {
     ))
 }
 
+/// Print usage to stderr and exit with status 2, the conventional code for bad arguments.
+fn usage_error() -> ! {
+    eprintln!("{}", usage());
+    std::process::exit(2)
+}
+
 pub fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.len() == 1 && matches!(args[0].as_str(), "--help" | "-h") {
-        println!("{}", usage());
-        return Ok(());
+    match args.as_slice() {
+        [flag] if matches!(flag.as_str(), "--help" | "-h") => {
+            println!("{}", usage());
+            return Ok(());
+        }
+        [flag] if matches!(flag.as_str(), "--version" | "-V") => {
+            println!("ncw-convert {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        _ => {}
     }
     let (command, input, output, options) = match args.as_slice() {
         [command, input, output, options @ ..]
@@ -76,7 +89,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             (command.as_str(), input, output, options)
         }
         [input, output] => ("decode", input, output, &[][..]),
-        _ => return Err(usage().into()),
+        _ => usage_error(),
     };
     // Complete decoding/encoding before creating an output; never overwrite an input or existing file.
     let mut message = None;
@@ -96,14 +109,14 @@ pub fn main() -> Result<(), Box<dyn Error>> {
                         "auto" => ncw::StereoMode::Auto,
                         "direct" => ncw::StereoMode::Direct,
                         "mid-side" => ncw::StereoMode::MidSide,
-                        _ => return Err(usage().into()),
+                        _ => usage_error(),
                     };
                     ncw::encode_pcm(&samples, spec, mode)?
                 }
                 [flag, path] if flag == "--template" => {
                     ncw::encode_pcm_with_template(&samples, spec, &std::fs::read(path)?)?
                 }
-                _ => return Err(usage().into()),
+                _ => usage_error(),
             }
         }
         "roundtrip" if options.is_empty() => {
@@ -129,7 +142,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             ));
             rebuilt
         }
-        _ => return Err(usage().into()),
+        _ => usage_error(),
     };
     let mut file = std::fs::OpenOptions::new()
         .write(true)
