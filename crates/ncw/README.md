@@ -58,3 +58,7 @@ remaining coverage limits. Float writing is not implemented.
 ## Contribution
 
 Pull requests are welcome. If you have Kontakt libraries at hand, the most valuable contribution right now is test material: see the *Help wanted* section of the [repository README](https://github.com/monomadic/ncw#help-wanted).
+
+## License
+
+Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

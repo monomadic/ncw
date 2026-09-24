@@ -34,9 +34,11 @@ data_offset  blocks             data_size bytes
 ## Block offset table
 
 One 32-bit entry per block, relative to `data_offset`, followed by one sentinel
-equal to `data_size`. The first entry is always 0. The decoder derives the block
-count from `(data_offset − blocks_offset) / 4 − 1` rather than trusting either
-`num_samples` or `data_size`.
+equal to `data_size`. The first entry is always 0. The decoder requires exactly
+`ceil(num_samples / 512) + 1` entries, strictly increasing block offsets, and a
+sentinel matching `data_size`. It checks file bounds and minimum channel framing
+before decoding, and bounds each group's payload reads to its table interval.
+Table-prefix bytes and bytes after the declared data region remain permitted.
 
 ## Blocks
 

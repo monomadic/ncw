@@ -80,3 +80,7 @@ otherwise lost headers, block choices, terminal deltas and tail padding.
 Float, 8-bit and 32-bit integer writing are unsupported. See the repository's
 [WRITER_VALIDATION.md](https://github.com/monomadic/ncw/blob/master/WRITER_VALIDATION.md)
 for independent Kontakt evidence and remaining limits.
+
+## License
+
+Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

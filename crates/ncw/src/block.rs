@@ -20,7 +20,8 @@ pub struct BlockHeader {
     pub base_value: i32,
     /// Positive: delta-encoded at this many bits per delta.
     /// Negative: raw samples at `abs(bits)` bits each.
-    /// Zero: raw samples at the file's `bits_per_sample`.
+    /// Zero: historically decoded as raw samples at the file's bit depth;
+    /// this interpretation is not validated against Kontakt. Writers reject it.
     pub bits: i16,
     pub flags: u16,
 }

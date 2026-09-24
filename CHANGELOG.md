@@ -16,6 +16,13 @@
   of a Debug-formatted error.
 
 ### Fixed
+* Reader validates table length, sentinel, offset ordering, data bounds and channel
+  framing; malformed offsets cannot silently duplicate audio or read across groups.
+* Decoding grows output from validated blocks instead of reserving full channel
+  buffers from untrusted metadata. Edited public reader fields are revalidated.
+* CLI rejects overflowing WAV byte rates, block alignment and RIFF sizes before
+  writing; conversion tests are self-contained in the published CLI package.
+* Both packages include MIT and Apache-2.0 license texts.
 * Fresh raw blocks use negative full depth (-16/-24), not the unvalidated zero-width
   representation. Expanded independent Kontakt tests exposed the old choice;
   template writing now rejects zero-width blocks too.

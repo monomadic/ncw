@@ -30,11 +30,11 @@ The decoder is verified sample-for-sample against the paired reference WAV fixtu
 
 1. **Redistributable mid/side fixtures with known PCM.** Three private commercial PCM16/24 files now agree with Kontakt decoding and round-trip byte-identically using the template writer. They cannot be committed as test assets. See [writer validation](WRITER_VALIDATION.md).
 2. **A reference WAV for `24-bit-stereo.ncw`.** The file decodes, but with no original to compare against its test only checks the sample count.
-3. **A file with uncompressed blocks.** Block header `bits == 0`, meaning samples are stored raw at the file's bit depth. Noise or very dense material is the most likely source.
+3. **A real file with zero-width blocks.** The historical reader treats `bits == 0` as raw samples, but independent Kontakt tests did not validate that interpretation. The writer rejects it; semantics remain unresolved.
 4. **An 8-bit file**, if Kontakt can produce one at all.
 5. **A file with more than two channels**, to learn how (or whether) mid/side and block layout apply beyond stereo.
 6. **A file with the alternate signature** `01 A8 9E D6 30 01 00 00`. Both signatures are accepted, but only `31` has been seen.
-7. **Truncated blocks at widths other than 16 and 32.** Delta blocks use every width from 2 to 26, but truncated blocks (negative `bits`) have only been seen at −16 and −32. An 8-bit or 24-bit file compressed by Kontakt would probably show −8 or −24.
+7. **Raw blocks at additional widths.** Repository fixtures contain negative widths −16 and −32; later live PCM24 probes also validate −24. Redistributable examples at other widths would extend coverage.
 
 Fixtures do not need to be long: a few thousand samples is enough, and the decoder pads the last block anyway.
 
@@ -44,13 +44,14 @@ Fixtures do not need to be long: a few thousand samples is enough, and the decod
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
+RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
 ```
 
 The minimum supported Rust version is 1.85 (edition 2024) and is checked in CI.
 
 ## License
 
-MIT OR Apache-2.0
+Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
 
 ## Writing and roundtrips
 
@@ -71,3 +72,9 @@ active audio from PCM**. Fresh encoding is deterministic but does not reproduce
 all NI encoder choices. Float/8-bit/32-bit writing and one-bit delta semantics
 remain unsupported. See [CLI usage](crates/ncw-convert/README.md) and
 [validation/limits](WRITER_VALIDATION.md).
+
+## Release checks
+
+Run the development checks above and follow [RELEASING.md](RELEASING.md) to
+verify both publication archives. Publish `ncw` before `ncw-convert`, whose
+registry dependency must be available first.

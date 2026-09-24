@@ -33,10 +33,18 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+  packages:
+    name: test publication archives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: ./scripts/check-packages.sh
+
   msrv:
-    name: build on MSRV
+    name: test on MSRV
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
-      - run: cargo build --workspace
+      - run: cargo test --workspace
