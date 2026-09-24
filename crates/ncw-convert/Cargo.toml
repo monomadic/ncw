@@ -13,4 +13,4 @@ authors.workspace = true
 
 [dependencies]
 hound = "3.5.0"
-ncw = { version = "0.3.0", path = "../ncw" }
+ncw = { version = "0.4.0", path = "../ncw" }
