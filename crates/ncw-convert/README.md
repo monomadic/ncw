@@ -25,20 +25,25 @@ cargo install ncw-convert
 ## Usage
 
 ```
-ncw-convert <INPUT.ncw> <OUTPUT.wav>
-ncw-convert decode <INPUT.ncw> <OUTPUT.wav>
-ncw-convert encode <INPUT.wav> <OUTPUT.ncw> [--mode auto|direct|mid-side | --template ORIGINAL.ncw]
-ncw-convert roundtrip <INPUT.ncw> <OUTPUT.ncw>
+ncw-convert <INPUT> [OUTPUT] [OPTIONS]
+ncw-convert decode <INPUT.ncw> [OUTPUT.wav]
+ncw-convert encode <INPUT.wav> [OUTPUT.ncw] [OPTIONS]
+ncw-convert roundtrip <INPUT.ncw> [OUTPUT.ncw]
 ```
 
-`--help` prints this usage and `--version` prints the installed version.
-Existing output files are never overwritten.
+The bare form looks at the input's leading bytes (falling back to its extension)
+and decodes an NCW file to WAV or encodes a WAV file to NCW. `OUTPUT` is
+optional: it defaults to the input path with the extension replaced by `.wav`
+or `.ncw`, and to `INPUT.roundtrip.ncw` for `roundtrip`. Existing output files
+are never overwritten. `--help` prints usage and `--version` prints the
+installed version.
 
 ### Decoding
 
 ```sh
-ncw-convert sample.ncw sample.wav
-ncw-convert decode sample.ncw sample.wav
+ncw-convert sample.ncw              # writes sample.wav
+ncw-convert sample.ncw out.wav
+ncw-convert decode sample.ncw out.wav
 ```
 
 PCM sources produce integer WAVs at the file's bit depth; float sources produce
@@ -47,8 +52,8 @@ PCM sources produce integer WAVs at the file's bit depth; float sources produce
 ### Encoding
 
 ```sh
-ncw-convert encode input.wav output.ncw
-ncw-convert encode input.wav output.ncw --mode direct
+ncw-convert input.wav               # writes input.ncw
+ncw-convert input.wav output.ncw --mode direct
 ncw-convert encode input.wav output.ncw --mode mid-side
 ```
 
@@ -61,8 +66,9 @@ PCM, not byte identity with NI's encoder.
 ### Template roundtrips
 
 ```sh
+ncw-convert roundtrip original.ncw  # writes original.roundtrip.ncw
 ncw-convert roundtrip original.ncw rebuilt.ncw
-ncw-convert encode decoded.wav rebuilt.ncw --template original.ncw
+ncw-convert decoded.wav rebuilt.ncw --template original.ncw
 ```
 
 `roundtrip` decodes to PCM and regenerates the NCW using the original's encoding

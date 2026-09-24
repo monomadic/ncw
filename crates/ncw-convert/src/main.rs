@@ -2,13 +2,24 @@ use std::{
     error::Error,
     fs::File,
     io::{Read, Seek, Write},
+    path::{Path, PathBuf},
 };
 
 use hound::{WavSpec, WavWriter};
 use ncw::{NcwReader, SampleFormat};
 
 fn usage() -> &'static str {
-    "usage:\n  ncw-convert <INPUT.ncw> <OUTPUT.wav>\n  ncw-convert decode <INPUT.ncw> <OUTPUT.wav>\n  ncw-convert encode <INPUT.wav> <OUTPUT.ncw> [--mode auto|direct|mid-side | --template ORIGINAL.ncw]\n  ncw-convert roundtrip <INPUT.ncw> <OUTPUT.ncw>"
+    "usage:\n  \
+     ncw-convert <INPUT> [OUTPUT] [OPTIONS]      decode .ncw to .wav or encode .wav to .ncw, by input content\n  \
+     ncw-convert decode <INPUT.ncw> [OUTPUT.wav]\n  \
+     ncw-convert encode <INPUT.wav> [OUTPUT.ncw] [OPTIONS]\n  \
+     ncw-convert roundtrip <INPUT.ncw> [OUTPUT.ncw]\n\n\
+     options:\n  \
+     --mode auto|direct|mid-side   stereo transform for fresh encoding (default auto)\n  \
+     --template ORIGINAL.ncw       rebuild using an existing file's encoding metadata\n  \
+     --help, --version\n\n\
+     OUTPUT defaults to INPUT with the extension replaced (.wav or .ncw); roundtrip \
+     defaults to INPUT.roundtrip.ncw. Existing outputs are never overwritten."
 }
 
 // Kontakt 8.9 writes a 20-byte PCM fmt chunk with four zero extension bytes.
@@ -69,6 +80,77 @@ fn usage_error() -> ! {
     std::process::exit(2)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Kind {
+    Ncw,
+    Wav,
+}
+
+/// Identify a file by its leading bytes, falling back to the extension.
+fn detect_kind(path: &Path) -> Result<Kind, Box<dyn Error>> {
+    let mut magic = [0u8; 4];
+    let read = File::open(path)?.read(&mut magic)?;
+    match &magic[..read] {
+        [0x01, 0xA8, 0x9E, 0xD6] => return Ok(Kind::Ncw),
+        b"RIFF" | b"RF64" => return Ok(Kind::Wav),
+        _ => {}
+    }
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("ncw") => Ok(Kind::Ncw),
+        Some("wav" | "wave") => Ok(Kind::Wav),
+        _ => Err(format!("cannot tell whether {} is NCW or WAV", path.display()).into()),
+    }
+}
+
+struct Options {
+    mode: Option<String>,
+    template: Option<String>,
+}
+
+/// Split arguments into positionals and the recognised `--flag VALUE` options.
+fn parse_args(args: &[String]) -> (Vec<&str>, Options) {
+    let mut positional = Vec::new();
+    let mut options = Options {
+        mode: None,
+        template: None,
+    };
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--mode" | "--template" => {
+                let Some(value) = iter.next() else {
+                    usage_error()
+                };
+                let slot = if arg == "--mode" {
+                    &mut options.mode
+                } else {
+                    &mut options.template
+                };
+                if slot.replace(value.clone()).is_some() {
+                    usage_error()
+                }
+            }
+            flag if flag.starts_with('-') && flag.len() > 1 => usage_error(),
+            _ => positional.push(arg.as_str()),
+        }
+    }
+    (positional, options)
+}
+
+fn parse_mode(mode: Option<&str>) -> ncw::StereoMode {
+    match mode {
+        None | Some("auto") => ncw::StereoMode::Auto,
+        Some("direct") => ncw::StereoMode::Direct,
+        Some("mid-side") => ncw::StereoMode::MidSide,
+        Some(_) => usage_error(),
+    }
+}
+
 pub fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.as_slice() {
@@ -82,44 +164,55 @@ pub fn main() -> Result<(), Box<dyn Error>> {
         }
         _ => {}
     }
-    let (command, input, output, options) = match args.as_slice() {
-        [command, input, output, options @ ..]
-            if matches!(command.as_str(), "encode" | "decode" | "roundtrip") =>
+    let (positional, options) = parse_args(&args);
+    let (command, input, output) = match positional.as_slice() {
+        [command, input, rest @ ..]
+            if matches!(*command, "encode" | "decode" | "roundtrip") && rest.len() <= 1 =>
         {
-            (command.as_str(), input, output, options)
+            (*command, *input, rest.first().copied())
         }
-        [input, output] => ("decode", input, output, &[][..]),
+        [input, rest @ ..] if rest.len() <= 1 => {
+            let command = match detect_kind(Path::new(input))? {
+                Kind::Ncw => "decode",
+                Kind::Wav => "encode",
+            };
+            (command, *input, rest.first().copied())
+        }
         _ => usage_error(),
+    };
+    let has_encode_options = options.mode.is_some() || options.template.is_some();
+    if command != "encode" && has_encode_options {
+        usage_error()
+    }
+    if options.mode.is_some() && options.template.is_some() {
+        usage_error()
+    }
+    let output = match output {
+        Some(path) => PathBuf::from(path),
+        None => match command {
+            "decode" => Path::new(input).with_extension("wav"),
+            "encode" => Path::new(input).with_extension("ncw"),
+            _ => Path::new(input).with_extension("roundtrip.ncw"),
+        },
     };
     // Complete decoding/encoding before creating an output; never overwrite an input or existing file.
     let mut message = None;
     let result = match command {
-        "decode" if options.is_empty() => {
+        "decode" => {
             let mut reader = NcwReader::read(File::open(input)?)?;
             let mut out = std::io::Cursor::new(Vec::new());
             write_wav(&mut reader, &mut out)?;
             out.into_inner()
         }
         "encode" => {
+            let mode = parse_mode(options.mode.as_deref());
             let (samples, spec) = read_pcm(input)?;
-            match options {
-                [] => ncw::encode_pcm(&samples, spec, ncw::StereoMode::Auto)?,
-                [flag, value] if flag == "--mode" => {
-                    let mode = match value.as_str() {
-                        "auto" => ncw::StereoMode::Auto,
-                        "direct" => ncw::StereoMode::Direct,
-                        "mid-side" => ncw::StereoMode::MidSide,
-                        _ => usage_error(),
-                    };
-                    ncw::encode_pcm(&samples, spec, mode)?
-                }
-                [flag, path] if flag == "--template" => {
-                    ncw::encode_pcm_with_template(&samples, spec, &std::fs::read(path)?)?
-                }
-                _ => usage_error(),
+            match &options.template {
+                None => ncw::encode_pcm(&samples, spec, mode)?,
+                Some(path) => ncw::encode_pcm_with_template(&samples, spec, &std::fs::read(path)?)?,
             }
         }
-        "roundtrip" if options.is_empty() => {
+        _ => {
             let original = std::fs::read(input)?;
             let mut reader = NcwReader::read(std::io::Cursor::new(&original))?;
             if reader.sample_format != SampleFormat::Pcm {
@@ -142,13 +235,14 @@ pub fn main() -> Result<(), Box<dyn Error>> {
             ));
             rebuilt
         }
-        _ => usage_error(),
     };
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(output)?;
+        .open(&output)
+        .map_err(|e| format!("cannot create {}: {e}", output.display()))?;
     file.write_all(&result)?;
+    println!("wrote {}", output.display());
     if let Some(message) = message {
         println!("{message}");
     }
@@ -196,7 +290,7 @@ pub fn write_wav<R: Read + Seek, W: Write + Seek>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{io::Cursor, path::Path};
+    use std::io::Cursor;
 
     fn convert(name: &str) -> Vec<u8> {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))

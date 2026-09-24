@@ -18,7 +18,8 @@ Format notes, including what is known and what is still guessed, live in [FORMAT
 
 ```bash
 cargo install ncw-convert
-ncw-convert sample.ncw sample.wav
+ncw-convert sample.ncw          # decodes to sample.wav
+ncw-convert sample.wav          # encodes PCM16/24 to sample.ncw
 ```
 
 Library usage is documented in the [crate README](crates/ncw/README.md).
@@ -54,9 +55,9 @@ MIT OR Apache-2.0
 ## Writing and roundtrips
 
 ```sh
-cargo run -p ncw-convert -- encode input.wav output.ncw
-cargo run -p ncw-convert -- roundtrip original.ncw rebuilt.ncw
-cargo run -p ncw-convert -- encode decoded.wav rebuilt.ncw --template original.ncw
+ncw-convert input.wav output.ncw
+ncw-convert roundtrip original.ncw rebuilt.ncw
+ncw-convert decoded.wav rebuilt.ncw --template original.ncw
 ```
 
 Writing currently supports mono/stereo integer PCM16/24. Auto mode uses mid/side

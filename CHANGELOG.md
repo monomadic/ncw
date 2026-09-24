@@ -9,6 +9,9 @@
 * Independent Kontakt validation on three private commercial fixtures; evidence in
   `WRITER_VALIDATION.md`. One-bit delta encoding excluded after a failed live probe.
 * CLI accepts Kontakt's observed 20-byte PCM fmt chunk and refuses existing outputs.
+* CLI bare form `ncw-convert INPUT [OUTPUT]` detects NCW or WAV input by content and
+  decodes or encodes accordingly; `OUTPUT` is optional for every command and defaults
+  to the input path with a swapped extension. Options may appear anywhere.
 * CLI `--version`; bad arguments print usage to stderr and exit with status 2 instead
   of a Debug-formatted error.
 
