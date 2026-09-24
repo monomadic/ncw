@@ -168,8 +168,11 @@ fn truncated_file_is_an_error_not_a_panic() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/16-bit-stereo.ncw");
     let bytes = fs::read(path).unwrap();
     let cut = &bytes[..bytes.len() / 2];
-    let mut ncw = NcwReader::read(std::io::Cursor::new(cut)).unwrap();
-    assert!(ncw.decode_samples().is_err());
+    assert!(
+        NcwReader::read(std::io::Cursor::new(cut))
+            .and_then(|mut reader| reader.decode_samples())
+            .is_err()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -418,4 +421,83 @@ fn invalid_bits_per_sample_is_rejected_on_read() {
         NcwReader::read(std::io::Cursor::new(file)),
         Err(ncw::NcwError::InvalidHeader(_))
     ));
+}
+
+#[test]
+fn corrupt_tables_and_headers_are_rejected() {
+    let block = synth::block(10, 2, 0, &synth::pack(&vec![0; 512], 2));
+    let good = synth::file(1, 16, 1024, &[block.clone(), block]);
+    for (offset, value) in [
+        (124, 0u32), // duplicated offset
+        (120, 144),  // nonzero first offset
+        (124, 400),  // beyond data
+        (128, 0),    // corrupt sentinel
+        (28, 0),     // corrupt data size
+        (20, 116),   // table overlaps header
+        (24, 133),   // misaligned table
+        (16, 512),   // table count differs from frames
+        (12, 0),     // invalid sample rate
+    ] {
+        let mut bad = good.clone();
+        bad[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        assert!(decode(bad).is_err(), "offset {offset}, value {value}");
+    }
+    // A decreasing offset must also fail even when all entries are within data.
+    let block = synth::block(10, 2, 0, &synth::pack(&vec![0; 512], 2));
+    let mut bad = synth::file(1, 16, 1536, &[block.clone(), block.clone(), block]);
+    bad[124..128].copy_from_slice(&288u32.to_le_bytes());
+    bad[128..132].copy_from_slice(&144u32.to_le_bytes());
+    assert!(decode(bad).is_err());
+}
+
+#[test]
+fn tiny_file_cannot_request_large_channel_buffers() {
+    let block = synth::block(0, 2, 0, &synth::pack(&vec![0; 512], 2));
+    let mut bad = synth::file(u16::MAX, 16, 8192, &[block]);
+    // Sixteen offsets pointing at one mono payload, despite 65535 channels.
+    bad.splice(124..124, [0; 60]);
+    bad[24..28].copy_from_slice(&188u32.to_le_bytes());
+    assert_eq!(bad.len(), 332);
+    assert!(NcwReader::read(std::io::Cursor::new(bad)).is_err());
+
+    // Even a single correctly ordered offset cannot claim absent channels.
+    let block = synth::block(0, 2, 0, &synth::pack(&vec![0; 512], 2));
+    assert!(decode(synth::file(u16::MAX, 16, 512, &[block])).is_err());
+}
+
+#[test]
+fn channel_payloads_cannot_cross_group_boundaries() {
+    let block = synth::block(10, 2, 0, &synth::pack(&vec![0; 512], 2));
+    let mut bad = synth::file(1, 16, 1024, &[block.clone(), block]);
+    bad[124..128].copy_from_slice(&80u32.to_le_bytes());
+    assert!(decode(bad).is_err());
+
+    let mut extra = synth::block(10, 2, 0, &synth::pack(&vec![0; 512], 2));
+    extra.push(0);
+    assert!(decode(synth::file(1, 16, 512, &[extra])).is_err());
+}
+
+#[test]
+fn empty_audio_prefix_and_trailing_bytes_remain_supported() {
+    let (_, samples) = decode(synth::file(1, 16, 0, &[])).unwrap();
+    assert!(samples.is_empty());
+    let block = synth::block(10, 2, 0, &synth::pack(&vec![0; 512], 2));
+    let mut file = synth::file(1, 16, 1, &[block]);
+    file.splice(120..120, [7; 3]);
+    file[20..24].copy_from_slice(&123u32.to_le_bytes());
+    file[24..28].copy_from_slice(&131u32.to_le_bytes());
+    file.extend([9; 3]);
+    assert_eq!(decode(file).unwrap().1, vec![10]);
+}
+
+#[test]
+fn edited_public_reader_fields_are_revalidated() {
+    let block = synth::block(10, 2, 0, &synth::pack(&vec![0; 512], 2));
+    let file = synth::file(1, 16, 512, &[block]);
+    let mut reader = NcwReader::read(std::io::Cursor::new(file.clone())).unwrap();
+    reader.header.channels = 0;
+    assert!(reader.decode_samples().is_err());
+    let mut reader = NcwReader::read(std::io::Cursor::new(file)).unwrap();
+    reader.block_offsets.clear();
+    assert!(reader.decode_samples().is_err());
 }

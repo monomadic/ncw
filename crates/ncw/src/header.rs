@@ -7,8 +7,8 @@ type Error = crate::NcwError;
 pub const HEADER_SIZE: usize = 120;
 const FILE_MAGICS: [u64; 2] = [0x01A89ED631010000, 0x01A89ED630010000];
 
-/// The 120-byte file header. Only the first 32 bytes are understood; the
-/// remainder is preserved by writers but has no known meaning.
+/// The parsed fields of the 120-byte file header. The sample-format word at
+/// offset 32 is not exposed here; template writing preserves the full header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NcwHeader {
     pub channels: u16,
@@ -51,9 +51,22 @@ impl NcwHeader {
         if !matches!(self.bits_per_sample, 8 | 16 | 24 | 32) {
             return Err(Error::InvalidHeader("unsupported bits per sample"));
         }
+        if self.sample_rate == 0 {
+            return Err(Error::InvalidHeader("sample rate is zero"));
+        }
+        if self.blocks_offset < HEADER_SIZE as u32 {
+            return Err(Error::InvalidHeader("block table overlaps file header"));
+        }
         if self.data_offset < self.blocks_offset {
             return Err(Error::InvalidHeader(
                 "data offset precedes block offset table",
+            ));
+        }
+        let table_bytes = self.data_offset - self.blocks_offset;
+        let expected_entries = self.num_samples.div_ceil(512) + 1;
+        if table_bytes != expected_entries * 4 {
+            return Err(Error::InvalidHeader(
+                "block table length does not match frame count",
             ));
         }
         Ok(())

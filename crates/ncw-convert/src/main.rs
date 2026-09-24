@@ -267,6 +267,36 @@ pub fn write_wav<R: Read + Seek, W: Write + Seek>(
         },
     };
 
+    // Hound computes these fields with unchecked arithmetic. Reject invalid
+    // parameters before it writes anything (including for empty audio).
+    if spec.channels == 0
+        || spec.sample_rate == 0
+        || !matches!(bits, 8 | 16 | 24 | 32)
+        || (is_float && bits != 32)
+    {
+        return Err("unsupported WAV sample format or zero channels/sample rate".into());
+    }
+    let block_align = spec
+        .channels
+        .checked_mul(bits / 8)
+        .ok_or("WAV block alignment exceeds 16 bits")?;
+    spec.sample_rate
+        .checked_mul(u32::from(block_align))
+        .ok_or("WAV byte rate exceeds 32 bits")?;
+    // Hound uses 44-byte PCM or 68-byte extensible headers, including RIFF's
+    // eight-byte prefix. Its RIFF and data lengths are both limited to u32.
+    let overhead = if spec.channels > 2 || bits > 16 {
+        60
+    } else {
+        36
+    };
+    reader
+        .header
+        .num_samples
+        .checked_mul(u32::from(block_align))
+        .and_then(|bytes| bytes.checked_add(overhead))
+        .ok_or("audio exceeds the RIFF WAV size limit")?;
+
     let mut writer = WavWriter::new(writer, spec)?;
 
     for sample in reader.decode_samples()? {
@@ -292,11 +322,45 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    fn convert(name: &str) -> Vec<u8> {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../ncw/tests/data")
-            .join(name);
-        let mut ncw = NcwReader::read(File::open(path).unwrap()).unwrap();
+    // Original synthetic raw blocks keep the CLI package's tests self-contained.
+    // Codec correctness against reference WAVs is covered by the library tests.
+    fn fixture(channels: u16, bits: u16, float: bool, samples: &[i32]) -> Vec<u8> {
+        let frames = samples.len() / channels as usize;
+        assert!((1..=512).contains(&frames));
+        assert_eq!(samples.len() % channels as usize, 0);
+        let mut data = Vec::new();
+        for channel in 0..channels as usize {
+            data.extend([0x16, 0x0c, 0x9a, 0x3e]);
+            data.extend(0i32.to_le_bytes());
+            data.extend((-(bits as i16)).to_le_bytes());
+            data.extend((if float { 2u16 } else { 0 }).to_le_bytes());
+            data.extend([0; 4]);
+            for frame in 0..512 {
+                let sample = samples[frame.min(frames - 1) * channels as usize + channel];
+                data.extend(&sample.to_le_bytes()[..bits as usize / 8]);
+            }
+        }
+        let mut bytes = vec![0; 120];
+        bytes[..8].copy_from_slice(&[1, 0xa8, 0x9e, 0xd6, 0x31, 1, 0, 0]);
+        bytes[8..10].copy_from_slice(&channels.to_le_bytes());
+        bytes[10..12].copy_from_slice(&bits.to_le_bytes());
+        for (offset, value) in [
+            (12, 48000),
+            (16, frames as u32),
+            (20, 120),
+            (24, 128),
+            (28, data.len() as u32),
+        ] {
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes.extend(0u32.to_le_bytes());
+        bytes.extend((data.len() as u32).to_le_bytes());
+        bytes.extend(data);
+        bytes
+    }
+
+    fn convert(bytes: Vec<u8>) -> Vec<u8> {
+        let mut ncw = NcwReader::read(Cursor::new(bytes)).unwrap();
         let mut buffer = Cursor::new(Vec::new());
         write_wav(&mut ncw, &mut buffer).unwrap();
         buffer.into_inner()
@@ -304,27 +368,81 @@ mod tests {
 
     #[test]
     fn converts_16_bit_mono() {
-        let wav = convert("16-bit-mono.ncw");
-        let reader = hound::WavReader::new(Cursor::new(wav)).unwrap();
+        let samples = [-32768, -1, 0, 32767];
+        let wav = convert(fixture(1, 16, false, &samples));
+        let mut reader = hound::WavReader::new(Cursor::new(wav)).unwrap();
         assert_eq!(reader.spec().bits_per_sample, 16);
         assert_eq!(reader.spec().sample_format, hound::SampleFormat::Int);
+        assert_eq!(
+            reader
+                .samples::<i32>()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            samples
+        );
     }
 
     #[test]
     fn converts_24_bit_stereo() {
-        let wav = convert("24-bit-stereo.ncw");
-        let reader = hound::WavReader::new(Cursor::new(wav)).unwrap();
+        let samples = [-8388608, 8388607, -1, 1, 0, 123456];
+        let wav = convert(fixture(2, 24, false, &samples));
+        let mut reader = hound::WavReader::new(Cursor::new(wav)).unwrap();
         assert_eq!(reader.spec().channels, 2);
         assert_eq!(reader.spec().bits_per_sample, 24);
+        assert_eq!(
+            reader
+                .samples::<i32>()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            samples
+        );
     }
 
     #[test]
     fn converts_32_bit_float_as_float() {
-        let wav = convert("32-bit-mono-float.ncw");
+        let samples = [-1.0f32, -0.125, 0.0, 0.75, 1.0];
+        let bits: Vec<i32> = samples.iter().map(|s| s.to_bits() as i32).collect();
+        let wav = convert(fixture(1, 32, true, &bits));
         let mut reader = hound::WavReader::new(Cursor::new(wav)).unwrap();
         assert_eq!(reader.spec().sample_format, hound::SampleFormat::Float);
-        let samples: Vec<f32> = reader.samples::<f32>().map(|s| s.unwrap()).collect();
-        assert!(samples.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
+        assert_eq!(
+            reader
+                .samples::<f32>()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            samples
+        );
+    }
+
+    #[test]
+    fn invalid_wav_parameters_fail_before_writing() {
+        for (channels, rate, frames) in [
+            (1, 0, 1),
+            (1, u32::MAX, 1),
+            (u16::MAX, 1, 1),
+            (1, 48000, u32::MAX),
+        ] {
+            let mut reader = NcwReader::read(Cursor::new(fixture(1, 16, false, &[0]))).unwrap();
+            reader.header.channels = channels;
+            reader.header.sample_rate = rate;
+            reader.header.num_samples = frames;
+            let mut output = Cursor::new(Vec::new());
+            assert!(write_wav(&mut reader, &mut output).is_err());
+            assert!(output.into_inner().is_empty());
+        }
+    }
+
+    #[test]
+    fn highest_representable_wav_byte_rate_is_accepted() {
+        let mut reader = NcwReader::read(Cursor::new(fixture(1, 16, false, &[42]))).unwrap();
+        reader.header.sample_rate = u32::MAX / 2;
+        let mut output = Cursor::new(Vec::new());
+        write_wav(&mut reader, &mut output).unwrap();
+        let bytes = output.into_inner();
+        assert_eq!(
+            u32::from_le_bytes(bytes[28..32].try_into().unwrap()),
+            u32::MAX - 1
+        );
     }
 }
 
