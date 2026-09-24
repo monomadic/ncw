@@ -10,7 +10,7 @@ use ncw::{NcwReader, SampleFormat};
 
 fn usage() -> &'static str {
     "usage:\n  \
-     ncw-convert <INPUT> [OUTPUT] [OPTIONS]      decode .ncw to .wav or encode .wav to .ncw, by input content\n  \
+     ncw-convert <INPUT> [OUTPUT] [OPTIONS]\n  \
      ncw-convert decode <INPUT.ncw> [OUTPUT.wav]\n  \
      ncw-convert encode <INPUT.wav> [OUTPUT.ncw] [OPTIONS]\n  \
      ncw-convert roundtrip <INPUT.ncw> [OUTPUT.ncw]\n\n\
