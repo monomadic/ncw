@@ -140,9 +140,9 @@ Native Instruments' encoder picks widths or flags.
 
 ## Kontakt 4's encoder
 
-A Kontakt 4.2 executable (macOS, SHA-256
-`d7183a84bc01b4d17b7bcf5d3ec0282733219e98aa5b06c6d739cb3e8130227b`; its
-embedded source paths name a `Kontakt4_2` build tree) contains Native
+The executable of Kontakt 4.2.2 (build 4504, macOS; SHA-256
+`d7183a84bc01b4d17b7bcf5d3ec0282733219e98aa5b06c6d739cb3e8130227b`, version
+from the app bundle's `Info.plist`) contains Native
 Instruments' own encoder, `BNCWWrite`, with symbols intact. The findings below
 come from reading its x86_64 machine code (`BNCWWrite::SetData` and
 `BNCWWrite::Write`); the program was not run.
