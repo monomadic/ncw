@@ -28,6 +28,12 @@ Library usage is documented in the [crate README](crates/ncw/README.md), and eve
 
 The decoder handles mono and stereo files as 16 and 24-bit PCM or 32-bit float, including mid/side blocks. It is verified sample-for-sample against the reference WAVs in `crates/ncw/tests/data`, and PCM16/24 decoding has been checked against Kontakt's own output on commercial library files that cannot be published. Float mid/side and a few block types have no real example yet; see [FORMAT.md](FORMAT.md#unknowns).
 
+## NCW mid/side is not lossless
+
+Native Instruments describes NCW as lossless. Reading the encoder inside a Kontakt 4.2 executable shows that its mid/side mode is not. It stores `mid = (L + R) / 2` and `side = (L − R) / 2` with integer division and no parity check, so whenever `L + R` is odd, one channel decodes one least significant bit closer to zero than the original. That affects roughly half the frames in each mid/side block. Mid/side blocks are found in 94% of a 3,484-file scan of commercial library NCWs, while current Kontakt (8.9.0) never writes them.
+
+Direct (left/right) blocks are lossless, and this crate's writer only uses mid/side where it is exact. The finding comes from static analysis of the binary and has not yet been reproduced by encoding a test signal in Kontakt 4. Details, addresses and the full set of Kontakt 4.2 encoder rules are in [FORMAT.md](FORMAT.md#kontakt-4s-encoder).
+
 ## Writing and roundtrips
 
 ```sh
@@ -44,7 +50,7 @@ Fresh encoding is deterministic and lossless and writes the same block format as
 
 Several parts of the format are covered only by synthetic tests, or not at all. The files that would help, and what each would settle, are listed in [FORMAT.md](FORMAT.md#wanted). The most useful is a mid/side encoded file that can be redistributed as a test fixture.
 
-Such a file has to come from the wild, because the publicly available Kontakt does not seem to produce one. Every encode tried with Kontakt 8.9.0 (generated test signals, noise, and a decoded natural mid/side file, through both its scripting API and instrument saving) wrote only direct left/right blocks. Kontakt still decodes mid/side correctly, and in commercial libraries mid/side is the norm: of 3,484 standalone NCW files scanned from a set of commercial libraries, 3,292 (94%) contain at least one mid/side block. Those files were presumably made with older versions or Native Instruments' own library tools. None of the 111 NCW files bundled with a standard Kontakt installation use mid/side either. The *Batch Compress* option in Kontakt's interface has not been tried.
+Such a file has to come from the wild, because the publicly available Kontakt does not seem to produce one. Every encode tried with Kontakt 8.9.0 (generated test signals, noise, and a decoded natural mid/side file, through both its scripting API and instrument saving) wrote only direct left/right blocks. Kontakt still decodes mid/side correctly, and in commercial libraries mid/side is the norm: of 3,484 standalone NCW files scanned from a set of commercial libraries, 3,292 (94%) contain at least one mid/side block. Older versions did write it: Kontakt 4.2's encoder chooses mid/side whenever it is smaller (see above). None of the 111 NCW files bundled with a standard Kontakt installation use mid/side either. The *Batch Compress* option in Kontakt's interface has not been tried.
 
 ## Development
 
