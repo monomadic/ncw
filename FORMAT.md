@@ -1,9 +1,14 @@
 # NCW container notes
 
-Everything here was learned by reading files, not from a specification. Where a
-claim has been verified against real Kontakt output it says so; where it rests on
-a formula or a description from someone else, it says that too. See the *Help
-wanted* section of the README for what would firm this up.
+There is no public specification. Everything here was learned by reading files
+and by comparing output against Kontakt's own decoder. Each claim says what it
+rests on: the fixtures in `crates/ncw/tests/data`, controlled Kontakt probes, or
+a formula that has not been checked. Kontakt probes were run against Kontakt
+8.9.0 (ARM64) using commercial library material; the results are summarised
+here, but that audio cannot be published.
+
+Open questions are collected under [Unknowns](#unknowns). Material that would
+help answer them is listed under [Wanted](#wanted).
 
 All integers are little-endian except the two magic numbers, which are given
 here as big-endian byte sequences.
@@ -20,16 +25,16 @@ data_offset  blocks             data_size bytes
 
 | Offset | Size | Field | Notes |
 |---|---|---|---|
-| 0 | 8 | signature | `01 A8 9E D6 31 01 00 00` (seen) or `01 A8 9E D6 30 01 00 00` (accepted, never seen) |
-| 8 | 2 | channels | 1 and 2 seen |
-| 10 | 2 | bits per sample | 16, 24, 32 seen. 8 accepted. |
-| 12 | 4 | sample rate | |
-| 16 | 4 | number of samples | frames, not bytes |
-| 20 | 4 | blocks offset | always 120 so far |
-| 24 | 4 | data offset | `blocks_offset + 4 × (blocks + 1)` |
-| 28 | 4 | data size | equals the last table entry and `file length − data_offset` in every fixture |
-| 32 | 4 | sample-format word | Kontakt uses bit 0 for 32-bit output type in tested version 0x131; 0x130 ignores it. Block flags separately select payload interpretation. Current Rust decoder still ignores this word. See field probes below. |
-| 36 | 84 | opaque bytes | One repository fixture contains a UTF-16LE filename; later live Kontakt outputs contain varying non-text bytes. Not a universal source-name field. Template writer preserves these bytes. |
+| 0x00 | 8 | signature | `01 A8 9E D6 31 01 00 00` (seen) or `01 A8 9E D6 30 01 00 00` (accepted, never seen in a real file) |
+| 0x08 | 2 | channels | 1 and 2 seen |
+| 0x0a | 2 | bits per sample | 16, 24, 32 seen. 8 accepted. |
+| 0x0c | 4 | sample rate | |
+| 0x10 | 4 | number of samples | frames, not bytes |
+| 0x14 | 4 | blocks offset | 120 in every file seen |
+| 0x18 | 4 | data offset | `blocks_offset + 4 × (blocks + 1)` |
+| 0x1c | 4 | data size | equals the last table entry and `file length − data_offset` in every fixture |
+| 0x20 | 4 | format word | 1 in both float fixtures, 0 in every PCM fixture. The decoder ignores it. See [Unknowns](#unknowns). |
+| 0x24 | 84 | opaque | Not a reliable filename field. The decoder ignores it; the template writer preserves it. See [Unknowns](#unknowns). |
 
 ## Block offset table
 
@@ -38,7 +43,8 @@ equal to `data_size`. The first entry is always 0. The decoder requires exactly
 `ceil(num_samples / 512) + 1` entries, strictly increasing block offsets, and a
 sentinel matching `data_size`. It checks file bounds and minimum channel framing
 before decoding, and bounds each group's payload reads to its table interval.
-Table-prefix bytes and bytes after the declared data region remain permitted.
+Bytes between the table and `data_offset`, and bytes after the data region, are
+permitted.
 
 ## Blocks
 
@@ -55,11 +61,11 @@ every stereo fixture in this repository.
 
 | Offset | Size | Field |
 |---|---|---|
-| 0 | 4 | signature `16 0C 9A 3E` |
-| 4 | 4 | base value (signed) |
-| 8 | 2 | bits (signed) |
-| 10 | 2 | flags |
-| 12 | 4 | unknown; zero in repository fixtures, semantics unverified |
+| 0x00 | 4 | signature `16 0C 9A 3E` |
+| 0x04 | 4 | base value (signed) |
+| 0x08 | 2 | bits (signed) |
+| 0x0a | 2 | flags |
+| 0x0c | 4 | unknown; zero in every fixture |
 
 ### `bits`
 
@@ -67,21 +73,16 @@ every stereo fixture in this repository.
   output sample is `base_value`; each delta is added to produce the next
   sample. The 512th delta is consumed but its result is never emitted.
   Verified against reference WAVs across hundreds of blocks.
-* `bits < 0`: bit truncated. The body holds 512 raw samples of `|bits|` width,
-  sign-extended. Repository fixtures show −16 and −32; later live PCM24 probes
-  also validate −24. `base_value` is still
-  populated in these blocks (818 of 821 are non-zero, presumably the first
-  sample) but is not needed to decode them.
-* `bits == 0`: the reader historically interprets this as raw samples at the
-  file's bit depth. This is not validated: expanded live tests produced incorrect
-  Kontakt PCM for newly generated zero-width blocks. Writing rejects this value;
-  actual semantics remain unresolved.
+* `bits < 0`: raw. The body holds 512 samples of `|bits|` width,
+  sign-extended. The fixtures contain −16 and −32; Kontakt probes also
+  confirmed −24. `base_value` is still populated in these blocks (818 of 821 in
+  the fixtures are non-zero) but is not needed to decode them.
+* `bits == 0` and `bits == 1`: not understood. See [Unknowns](#unknowns).
 
 Values are packed LSB-first: the first value occupies the low bits of the first
-byte. Delta widths are chosen freely: every width from 2 to 24 plus 26 occurs
-across the fixtures, so non-byte-multiple widths above 8 are normal. Truncated
-widths have only been seen at byte multiples. The unpacker accepts 1 to 32 for
-both.
+byte. Delta widths are chosen freely: every width from 2 to 24, plus 26, occurs
+across the fixtures, so non-byte-multiple widths above 8 are normal. Raw widths
+have only been seen at byte multiples. The unpacker accepts 1 to 32 for both.
 
 ### `flags`
 
@@ -91,84 +92,85 @@ both.
 | 1 | samples are IEEE-754 single precision, stored as raw bit patterns |
 
 Mid/side reconstruction is `left = mid + side`, `right = mid − side`, using
-wrapping integer arithmetic for PCM and float arithmetic for float files. The
-encoder is understood to store `mid = (l + r) / 2` and `side = (l − r) / 2`.
-Three private PCM16/24 natural files now match Kontakt 8.9.0's decoded PCM
-exactly with this inverse; their authoring builds are unknown. This does not
-validate float mid/side. Opposite-parity L/R pairs cannot be represented by this
-integer inverse, so the fresh writer falls back to direct encoding (or rejects
-forced mid/side). No low-bit correction is invented.
+wrapping integer arithmetic for PCM and float arithmetic for float files. For
+PCM16 and PCM24 this is verified: three natural mid/side files decode to exactly
+the same samples as Kontakt does, and 163 mid/side files produced by this
+crate's writer also decode identically in Kontakt (see
+[WRITER_VALIDATION.md](WRITER_VALIDATION.md)). Float mid/side has not been
+checked against any real file.
 
-Controlled Kontakt probes with flags 00, 10, 01 and 11 observed that the **first
-channel's flag** selects the transform; the reader follows that behavior. Mono
-mid/side is rejected. Evidence is described in [WRITER_VALIDATION.md](WRITER_VALIDATION.md).
+The inverse implies the encoder stores `mid = (l + r) / 2` and
+`side = (l − r) / 2`, which cannot represent a sample pair whose sum is odd. The
+writer therefore uses mid/side only for blocks where every pair has an even sum.
+
+Controlled Kontakt probes with every combination of the two channels' bit 0
+showed that **the first channel's flag** selects the transform; the reader
+follows that. Mid/side on a mono file is rejected.
 
 Delta coding operates on the raw sample or bit pattern regardless of format, so
 float files are delta coded on their integer representation. Verified against
 the two float fixtures.
 
-## Writer boundaries
+## Writer
 
-Fresh PCM16/24 encoding chooses delta blocks at widths 2..native-depth-minus-one,
-otherwise negative native-depth raw blocks (`bits == -16` or `-24`). It compares direct and exactly
-representable sum/difference payload costs, preferring direct on a tie. Padding
-repeats the last stored sample and the final delta is zero. These are this
-writer's choices, not a claim about NI's encoder policy.
+The writer is this crate's own encoder, not a reproduction of Native
+Instruments' encoder. It handles PCM16 and PCM24, mono and stereo.
 
-A one-bit-delta trial passed this decoder but mismatched Kontakt on 2,158 PCM16
-sample values; a minimum width of two eliminated those mismatches on the tested
-fixtures. Width-one semantics remain unresolved; template writing rejects them and zero-width blocks.
+Fresh encoding chooses delta blocks at widths 2 up to one less than the bit
+depth, otherwise raw blocks at the negative bit depth (−16 or −24). For stereo
+it compares direct and mid/side costs where mid/side is exactly representable,
+preferring direct on a tie. Padding repeats the last stored sample and the final
+delta is zero. It never emits widths 0 or 1 (see [Unknowns](#unknowns)).
 
-Template writing also handles negative raw widths, preserves opaque header and
-block fields, table-prefix bytes, unused terminal deltas, final padded samples
-and trailing bytes. It reconstructs all active payload values from PCM and checks
-strict table/sentinel/boundary consistency. Original NCW bytes are needed as the
-template: WAV alone cannot supply all of those details. Width/flag selection is
-preserved rather than reverse-engineered by a successful template roundtrip.
+Template writing takes an original NCW plus PCM and rebuilds the file
+byte-for-byte. It keeps the header, the block widths and flags, unused terminal
+deltas, padded tail samples and any extra bytes, and recomputes every active
+payload value from the PCM. A WAV alone does not contain those choices, so the
+original NCW is required. Byte identity from a template says nothing about how
+Native Instruments' encoder picks widths or flags.
 
-## Unresolved fields and reverse-engineering plan
+## Unknowns
 
-The canonical [unknown-field register](../ni-file-reference/other/NCW-unknowns.md)
-records offsets, observations, hypotheses, controls and completion criteria.
-It covers the 0x20 word, opaque 0x24..0x77 region, widths 0/1, the channel-header
-unknown word and raw base, flag combinations, terminal deltas/padding and encoder
-selection. Use it instead of inferring field meaning from template preservation.
+Each entry states what has been observed and what is still open. A field this
+decoder ignores is not thereby known to be meaningless.
 
-The pinned Kontakt ARM64 writer leaves header bytes 0x24..0x77 uninitialized,
-then writes all 120 bytes. Six controlled zero/0xa5 replacements across three
-natural files preserved exact Kontakt PCM and WAV format chunks. See the
-[header construction evidence](../ni-file-reference/other/NCW-header-write.md)
-for addresses, hashes and limits. This explains a mechanism for incidental header
-contents in that build; it does not establish a universal historical schema.
-Fresh writing continues to use deterministic zeros; templates preserve original
-bytes. The writer derives word 0x20 from a float-source boolean.
+| Location | Observed | Open |
+|---|---|---|
+| Header `0x20` | 1 in float fixtures, 0 in PCM fixtures. In 40 Kontakt probes, bit 0 selected a 32-bit output type in files with signature `31`, and was ignored in files with signature `30`. Block flag bit 1 separately controls how samples are interpreted. | This decoder infers the format from block flags alone, so a file whose header and block flags disagree can produce a different WAV type from Kontakt's. Other values and bits are untested. |
+| Header `0x24..0x77` | One fixture holds a UTF-16LE filename; newer Kontakt output holds varying non-text bytes. Two exports of the same audio differed in 28 header bytes with identical tables and payloads. Kontakt 8.9.0's writer was traced leaving this region uninitialised before writing all 120 bytes, and filling it with zeros or `0xa5` in six probes left Kontakt's output unchanged. | Whether any build stores meaningful data here, and whether any reader uses it. This writer fills it with zeros. |
+| Block width 0 | The decoder treats it as raw samples at the file's bit depth, a historical guess. Files written that way decoded incorrectly in Kontakt. In Kontakt 8.9.0's optimised PCM path, widths 0 and 1 branch to an exit that writes no samples, and repeated probes produced output that depended on what had been decoded before. | Whether any encoder produces it, and what other Kontakt versions do with it. The writer rejects it. |
+| Block width 1 | Treating it as a signed one-bit delta passed this decoder but disagreed with Kontakt on 2,158 PCM16 samples. The dispatch finding above applies. | As for width 0. The writer rejects it. |
+| Sub-block `+0x0c` | Zero in every fixture. In 22 probes on mono PCM16/24 raw and delta blocks, changing it did not change Kontakt's output. | Float, stereo and mid/side blocks are untested, as is whether any build writes non-zero values. |
+| Sub-block base on raw blocks | Usually non-zero (818 of 821 raw sub-blocks in the fixtures). Changing it on mono PCM16/24 raw blocks did not change Kontakt's output. | What the encoder puts there, and whether it matters for float or stereo. |
+| Flags beyond bits 0 and 1 | Bits 0 and 1 behave as described above. | Float combined with mid/side, the high bits, and more than two channels are untested. |
+| Terminal delta and padding | The 512th delta's result is never emitted, and samples past `num_samples` are discarded. | How Native Instruments chooses those values, and whether any decoder carries state across blocks. |
+| Encoder choices | Re-encoding gives identical audio but different widths, flags and bytes. One natural file with 635 mid/side and 38 direct block groups, decoded and re-encoded by Kontakt 8.9.0 (both through its scripting API and by saving an instrument), came back as 673 direct groups and 5.8% larger. | How Native Instruments' encoder chooses widths and mid/side, and whether that depends on the Kontakt version or on a separate library-production tool. |
+| Signature `30`, 8-bit, more than two channels | Accepted by the parser. | No real file seen. |
 
-Follow-up [field probes](../ni-file-reference/other/NCW-field-probes.md) establish
-separate roles: header bit 0 selects 32-bit output type (except version 0x130),
-while block bit 1 controls sample interpretation. All 40 format cases match exact
-expected output. Our reader currently infers format from block flags alone, so
-contradictory headers can produce a different output type from Kontakt. This is
-a documented compatibility gap, not a change to codec behavior in this pass.
-Another 22 probes establish unchanged PCM for block-word +0x0c mutations in
-mono PCM16/24 raw/delta blocks, and base mutations in the raw variants. Extend
-coverage before applying those conclusions to every representation.
+## Wanted
 
-### Width 0/1 follow-up (2026-09-20)
+Material that would answer an open question. Fixtures do not need to be long; a
+few thousand samples is enough. Please open an issue or pull request with the
+`.ncw` and, where possible, the `.wav` it was made from.
 
-Minimal Kontakt probes now show history-dependent results: three identical-input
-pairs produced different middle-block PCM while valid surrounding blocks decoded
-exactly. Some output repeated previous controls. This favors an unsupported/skipped
-branch leaving stale output over a newly inferred sample encoding, but does not prove
-that mechanism. API success is not evidence of validity. Keep writer rejection and
-trace width dispatch next; do not assign silence or constant semantics from zero
-output. Evidence and scope: [B1/B2 register](../ni-file-reference/other/NCW-unknowns.md#b1b2-minimal-probe-result-2026-09-20).
+1. **A redistributable mid/side file with known PCM.** Mid/side PCM is
+   understood, but every natural example comes from a commercial library and
+   cannot be committed as a test fixture.
+2. **A float mid/side file.** Float reconstruction is untested against real data.
+3. **A reference WAV for `24-bit-stereo.ncw`.** It decodes, but its test can
+   only check the sample count.
+4. **A real file with width 0 or 1 blocks**, if any encoder produces them.
+5. **An 8-bit file**, if Kontakt can produce one at all.
+6. **A file with more than two channels**, to learn how block layout and
+   mid/side apply beyond stereo.
+7. **A file with signature `01 A8 9E D6 30 01 00 00`.**
+8. **Exports of the same WAV from different Kontakt versions or tools**, to learn
+   how the encoder chooses widths and mid/side.
 
-### Static dispatch follow-up (2026-09-21)
+### No longer needed
 
-The pinned Kontakt ARM64 optimized PCM branch dispatches widths 0/1 straight to an
-exit path which performs no destination writes. This gives a concrete mechanism
-consistent with the earlier history-dependent outputs. The selector must be enabled
-and the float flag clear; fallback behavior and actual runtime selection were not
-traced. See [addresses, predicates and evidence](../ni-file-reference/other/NCW-width-dispatch.md).
-Writer rejection remains; this is not a new special encoding or proof of every
-Kontakt version's behavior.
+* **Natural mid/side files.** Until September 2026 no real mid/side file had
+  been examined and the reconstruction formula was an untested guess. Natural
+  mid/side files are now easy to find in commercial libraries, and three PCM16/24
+  examples were checked against Kontakt sample-for-sample.
+* **Raw blocks at −24.** Confirmed in Kontakt probes on PCM24 material.

@@ -47,3 +47,19 @@ cargo publish -p ncw-convert
 
 A CLI dry run before the library is available will fail dependency resolution.
 Inspect each dry-run result before performing the corresponding upload.
+
+## GitHub release with binaries
+
+After both crates are published, tag the release commit and push the tag:
+
+```sh
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+`.github/workflows/release.yml` runs the tests, builds `ncw-convert` for Linux
+(x86_64, aarch64), macOS (Apple silicon, Intel) and Windows (x86_64), and
+creates a GitHub release named after the tag. Each archive contains the binary,
+README.md and both licence texts; a `SHA256SUMS` file covers all archives. The
+release notes are the tag version's section of CHANGELOG.md, so that section
+must exist under a `## <version>` heading before tagging.

@@ -10,11 +10,10 @@
 - [ ] Investigate fresh encoder tie-breaking and final padding; metadata-free byte identity remains open.
 - [ ] Consider a compact metadata sidecar so lossless NCW reconstruction need not retain the original as a template.
 
-Format research belongs in ../ni-file-reference/TODO.md and source preservation
-in ../ni-file-sources/TODO.md. See WRITER_VALIDATION.md before repeating experiments.
+See WRITER_VALIDATION.md before repeating experiments.
 
-- [ ] Follow the canonical unknown-field experiments in
-  ../ni-file-reference/other/NCW-unknowns.md; promote behavior only with named evidence.
+- [ ] Work through the open questions in FORMAT.md (Unknowns); promote behavior
+  only with named evidence.
 
 - [ ] Investigate strict reader rejection of unvalidated widths 0/1 after tracing
   NI dispatch: minimal live probes produced history-dependent PCM, while the current
@@ -22,6 +21,6 @@ in ../ni-file-sources/TODO.md. See WRITER_VALIDATION.md before repeating experim
 
 - [ ] Decide how the reader and CLI should honor main-header format bit 0 and
   version 0x130 independently of block float flags; current inference can export
-  a different WAV type from Kontakt on contradictory headers. Use the 40-case
-  matrix in ../ni-file-reference/other/NCW-field-probes.md, including exact numeric
-  conversion expectations, before changing behavior.
+  a different WAV type from Kontakt on contradictory headers. Check against the
+  40-case probe matrix, including exact numeric conversion expectations, before
+  changing behavior.

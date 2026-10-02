@@ -1,9 +1,5 @@
 # Writer validation — 2026-09-19
 
-The maintained implementation is this repository. Original format research lives
-in `../ni-file-reference`; private materials and research tools in `../ni-file-sources`.
-These are separate from the historical, read-only `../ni-file`.
-
 Three private natural NCWs were tested against the installed Kontakt 8.9.0 decoder.
 Original authoring builds are unknown. Installation provenance is not independently
 verified; executable SHA256:
@@ -32,9 +28,8 @@ mismatched PCM16 values when decoded by Kontakt. The writer now requires at leas
 two bits for newly encoded deltas, and rejects width-one template blocks. Width-one
 semantics remain an open research question, not an established decoder correction.
 
-Detailed hash-pinned reports are in `../ni-file-sources/catalog/ncw-writer-validation.json`;
-private outputs/scripts are in its ignored `local/ncw-writer-validation` directory.
-No commercial sample assets were added here. Public tests use existing fixtures
+Detailed hash-pinned reports, outputs and scripts are kept privately with the
+source material. No commercial sample assets were added here. Public tests use existing fixtures
 and original synthetic data; independent live coverage currently spans these three
 files, not all formats. Float/8/32-bit writing remains unsupported. Fresh raw blocks
 are covered by synthetic self-tests, not these natural-file Kontakt comparisons.
@@ -61,8 +56,7 @@ zero-width raw blocks. The writer now emits observed negative full-depth raw blo
 template writing rejects them. The historical decoder interpretation is retained,
 not promoted as validated behavior. The earlier three-fixture results remain valid.
 
-Reports: ../ni-file-sources/catalog/ncw-expanded-validation.json. Failed and fixed
-runs, scripts and audio are preserved in ignored local/ncw-expanded-validation.
-No commercial audio was added to this repository. Future testing should reuse this
+Reports, failed and fixed runs, scripts and audio are kept privately with the
+source material. No commercial audio was added to this repository. Future testing should reuse this
 batch and independently decode new encoding variants in Kontakt, not rely only on
 self-roundtrips. Build-scoped evidence does not establish all NCW variants.

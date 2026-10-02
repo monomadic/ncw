@@ -12,9 +12,7 @@ mid/side stereo.
 
 This is a command-line frontend to the [ncw crate](https://crates.io/crates/ncw)
 that decodes NCW files to standard WAV files, encodes PCM WAV files to NCW, and
-performs byte-identical template roundtrips. It is part of a
-[wider reverse engineering effort](https://github.com/open-sound) of proprietary
-audio formats.
+performs byte-identical template roundtrips.
 
 ## Installation
 

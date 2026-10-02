@@ -5,7 +5,7 @@
 <a href="https://docs.rs/ncw" rel="nofollow noopener noreferrer"><img src="https://img.shields.io/docsrs/ncw" alt="docs.rs"></a>
 </p>
 
-NCW (Native Instruments Compressed Wave) is the lossless audio container used by Kontakt libraries. It is essentially DPCM plus bit truncation, with optional mid/side stereo. This repository is part of a [wider reverse engineering effort](https://github.com/open-sound) of proprietary audio formats with maintained research notes in the sibling `ni-file-reference` repository and private evidence/tooling in `ni-file-sources`. The historical `ni-file` repository is retired as an implementation target.
+NCW (Native Instruments Compressed Wave) is the lossless audio container used by Kontakt libraries. It is essentially DPCM plus bit truncation, with optional mid/side stereo.
 
 | Crate | What it is |
 |---|---|
@@ -26,17 +26,7 @@ Library usage is documented in the [crate README](crates/ncw/README.md).
 
 ## Help wanted
 
-The decoder is verified sample-for-sample against the paired reference WAV fixtures in `crates/ncw/tests/data` (one NCW has no WAV), but those fixtures only exercise part of the format. Several code paths are currently covered by synthetic files that follow the documented formulas rather than by real Kontakt output. If you can produce any of the following from a library you own, please open an issue or pull request with the `.ncw` and, where possible, the original `.wav` it was made from:
-
-1. **Redistributable mid/side fixtures with known PCM.** Three private commercial PCM16/24 files now agree with Kontakt decoding and round-trip byte-identically using the template writer. They cannot be committed as test assets. See [writer validation](WRITER_VALIDATION.md).
-2. **A reference WAV for `24-bit-stereo.ncw`.** The file decodes, but with no original to compare against its test only checks the sample count.
-3. **A real file with zero-width blocks.** The historical reader treats `bits == 0` as raw samples, but independent Kontakt tests did not validate that interpretation. The writer rejects it; semantics remain unresolved.
-4. **An 8-bit file**, if Kontakt can produce one at all.
-5. **A file with more than two channels**, to learn how (or whether) mid/side and block layout apply beyond stereo.
-6. **A file with the alternate signature** `01 A8 9E D6 30 01 00 00`. Both signatures are accepted, but only `31` has been seen.
-7. **Raw blocks at additional widths.** Repository fixtures contain negative widths −16 and −32; later live PCM24 probes also validate −24. Redistributable examples at other widths would extend coverage.
-
-Fixtures do not need to be long: a few thousand samples is enough, and the decoder pads the last block anyway.
+The decoder is verified sample-for-sample against the paired reference WAVs in `crates/ncw/tests/data`, and against Kontakt's own output on private commercial material. Several cases are still covered only by synthetic files, or not at all. The list of files that would help, and what each would settle, is in [FORMAT.md](FORMAT.md#wanted). The most useful is a mid/side encoded file that can be redistributed as a test fixture.
 
 ## Development
 

@@ -9,7 +9,7 @@
 
 NCW (Native Instruments Compressed Wave) is a lossless compression algorithm developed by Native Instruments which is essentially DPCM and bit truncation.
 
-This is a zero-dependency Rust library to decode NCW files and to write mono/stereo PCM16/24 NCW files. It is part of a [wider reverse engineering effort](https://github.com/open-sound) of proprietary audio formats.
+This is a zero-dependency Rust library to decode NCW files and to write mono/stereo PCM16/24 NCW files.
 
 The repository also ships [`ncw-convert`](https://crates.io/crates/ncw-convert), a command-line NCW/WAV converter built on this crate.
 
