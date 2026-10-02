@@ -32,7 +32,7 @@ The decoder handles mono and stereo files as 16 and 24-bit PCM or 32-bit float, 
 
 Native Instruments describes NCW as lossless. Reading the encoder inside a Kontakt 4.2 executable shows that its mid/side mode is not. It stores `mid = (L + R) / 2` and `side = (L − R) / 2` with integer division and no parity check, so whenever `L + R` is odd, one channel decodes one least significant bit closer to zero than the original. That affects roughly half the frames in each mid/side block. Mid/side blocks are found in 94% of a 3,484-file scan of commercial library NCWs, while current Kontakt (8.9.0) never writes them.
 
-Direct (left/right) blocks are lossless, and this crate's writer only uses mid/side where it is exact. The finding comes from static analysis of the binary and has not yet been reproduced by encoding a test signal in Kontakt 4. Details, addresses and the full set of Kontakt 4.2 encoder rules are in [FORMAT.md](FORMAT.md#kontakt-4s-encoder).
+Direct (left/right) blocks are lossless, and this crate's writer only uses mid/side where it is exact. Shipped commercial files confirm it: in the three examined files, odd `L + R` sums occur in 47–50% of frames in direct blocks but in none of 581,530 frames in mid/side blocks, which is only possible if those blocks dropped a bit. Details, addresses and the full set of Kontakt 4.2 encoder rules are in [FORMAT.md](FORMAT.md#kontakt-4s-encoder).
 
 ## Writing and roundtrips
 

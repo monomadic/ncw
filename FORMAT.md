@@ -184,18 +184,36 @@ Native Instruments describes NCW as a lossless codec (for example, the Kontakt
 direct blocks but not for these mid/side blocks. Consequences:
 
 * Commercial NCW files that use mid/side, 94% of the scan described under
-  [Wanted](#wanted), may differ from their source recordings by one least
-  significant bit in places. Without the original WAVs this cannot be detected
-  from the NCW file alone, because decoded mid/side output always has an even
-  `l + r`.
+  [Wanted](#wanted), differ from their source recordings by one least
+  significant bit in places. Shipped files show this directly (see below).
 * Kontakt 8.9.0 never writes mid/side. Dropping it would be consistent with the
   loss having been noticed, though nothing in the binaries says why it changed.
 * This decoder reproduces exactly what Kontakt plays. The loss happened when
   the file was made, not when it is read.
 
-Not yet confirmed by running Kontakt 4: encoding a stereo signal with known odd
-sums and comparing the decoded result would make this an observed result rather
-than a reading of the code.
+#### Evidence in shipped files
+
+Decoded mid/side output always has an even `l + r`, so a lossless encoder could
+only choose mid/side for a block whose source frames all had even sums. In real
+recordings the lowest bit behaves like noise, so that almost never happens. The
+three commercial mid/side files used for validation show:
+
+| File | Direct blocks: frames with odd `l + r` | Mid/side blocks: frames with odd `l + r` |
+|---|---|---|
+| PCM24, 344,410 frames | 9,663 of 19,456 (49.7%) | 0 of 324,954 |
+| PCM16, 348,087 frames | 58,712 of 123,831 (47.4%) | 0 of 224,256 |
+| PCM24, 37,952 frames | 2,832 of 5,632 (50.3%) | 0 of 32,320 |
+
+None of the 1,137 mid/side blocks is silent or dual mono (86–99.9% of their
+frames have `l ≠ r`), and none has only even samples, so each channel's lowest
+bit is varying normally. The only direct blocks without an odd sum are three
+blocks of digital silence. If the source's parity behaved as it does in the
+direct blocks, all 581,530 mid/side frames having even sums would have a
+probability of about 2^−581,530. These files lost the least significant bit of
+one channel in roughly half of their mid/side frames.
+
+The parity count needs only the NCW file, so any stereo NCW can be checked the
+same way. Kontakt 4 itself was not run; it no longer starts on current macOS.
 
 ## Unknowns
 
