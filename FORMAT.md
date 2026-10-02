@@ -165,7 +165,9 @@ few thousand samples is enough. Please open an issue or pull request with the
    Kontakt 8.9.0 wrote only direct blocks in every encode tried (21 generated
    signals, and a decoded natural mid/side file re-encoded through its scripting
    API and by saving an instrument), and none of the 111 NCW files installed
-   with Kontakt use mid/side. *Batch Compress* in Kontakt's interface is
+   with Kontakt use mid/side. Yet in commercial libraries it is the norm: of
+   3,484 standalone NCW files scanned from a set of commercial libraries,
+   3,292 (94%) contain at least one mid/side block. *Batch Compress* in Kontakt's interface is
    untested. An example produced in the wild, or a tool or version that
    writes mid/side, is needed.
 2. **A float mid/side file.** Float reconstruction is untested against real data.
@@ -183,6 +185,7 @@ few thousand samples is enough. Please open an issue or pull request with the
 
 * **Natural mid/side files.** Until September 2026 no real mid/side file had
   been examined and the reconstruction formula was an untested guess. Natural
-  mid/side files are now easy to find in commercial libraries, and three PCM16/24
+  mid/side files turn out to make up 94% of a 3,484-file commercial library
+  scan, and three PCM16/24
   examples were checked against Kontakt sample-for-sample.
 * **Raw blocks at −24.** Confirmed in Kontakt probes on PCM24 material.
