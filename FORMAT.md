@@ -113,8 +113,14 @@ the two float fixtures.
 
 ## Writer
 
-The writer is this crate's own encoder, not a reproduction of Native
-Instruments' encoder. It handles PCM16 and PCM24, mono and stereo.
+The writer handles PCM16 and PCM24, mono and stereo. It produces the same block
+format Native Instruments' tools do, and Kontakt decodes its output exactly, but
+its choice of widths, mid/side and padding was written from the format rather
+than taken from Native Instruments' encoder. Re-encoding three natural files
+gave the same file sizes as the originals; one PCM24 file matched byte-for-byte
+after the header, and the others differed in some block choices. Kontakt 8.9.0
+itself does not reproduce those originals either (see *Encoder choices* under
+[Unknowns](#unknowns)).
 
 Fresh encoding chooses delta blocks at widths 2 up to one less than the bit
 depth, otherwise raw blocks at the negative bit depth (−16 or −24). For stereo

@@ -38,7 +38,7 @@ ncw-convert decoded.wav rebuilt.ncw --template original.ncw
 
 Writing supports mono and stereo integer PCM16/24. Float, 8-bit and 32-bit input is refused. By default mid/side is used only where it is exactly representable and smaller; `--mode direct` disables it, and `--mode mid-side` forces it, failing if any left/right pair has an odd sum. No clipping or rounding is performed. Existing output files are never overwritten.
 
-Fresh encoding is deterministic and lossless, but it is this crate's own encoder: the bytes differ from what Native Instruments' tools produce. To reproduce an original file exactly, use template mode, which keeps the original's header, block widths, flags and padding and **rebuilds the audio itself from PCM**. Block widths 0 and 1 are never written, because their meaning is not understood. Validation against Kontakt is described in [WRITER_VALIDATION.md](WRITER_VALIDATION.md).
+Fresh encoding is deterministic and lossless and writes the same block format as Native Instruments' tools, but its choice of widths and mid/side is independent of theirs, so the bytes can differ from an original file. To reproduce an original file exactly, use template mode, which keeps the original's header, block widths, flags and padding and **rebuilds the audio itself from PCM**. Block widths 0 and 1 are never written, because their meaning is not understood. Validation against Kontakt is described in [WRITER_VALIDATION.md](WRITER_VALIDATION.md).
 
 ## Help wanted
 
