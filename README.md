@@ -44,6 +44,8 @@ Fresh encoding is deterministic and lossless and writes the same block format as
 
 Several parts of the format are covered only by synthetic tests, or not at all. The files that would help, and what each would settle, are listed in [FORMAT.md](FORMAT.md#wanted). The most useful is a mid/side encoded file that can be redistributed as a test fixture.
 
+Such a file has to come from the wild, because the publicly available Kontakt does not seem to produce one. Every encode tried with Kontakt 8.9.0 (generated test signals, noise, and a decoded natural mid/side file, through both its scripting API and instrument saving) wrote only direct left/right blocks. Kontakt still decodes mid/side correctly, and mid/side files are common in commercial libraries, so they were presumably made with older versions or Native Instruments' own library tools. None of the 111 NCW files bundled with a standard Kontakt installation use mid/side either. The *Batch Compress* option in Kontakt's interface has not been tried.
+
 ## Development
 
 ```bash

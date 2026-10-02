@@ -161,7 +161,13 @@ few thousand samples is enough. Please open an issue or pull request with the
 
 1. **A redistributable mid/side file with known PCM.** Mid/side PCM is
    understood, but every natural example comes from a commercial library and
-   cannot be committed as a test fixture.
+   cannot be committed as a test fixture. Making one is not straightforward:
+   Kontakt 8.9.0 wrote only direct blocks in every encode tried (21 generated
+   signals, and a decoded natural mid/side file re-encoded through its scripting
+   API and by saving an instrument), and none of the 111 NCW files installed
+   with Kontakt use mid/side. *Batch Compress* in Kontakt's interface is
+   untested. An example produced in the wild, or a tool or version that
+   writes mid/side, is needed.
 2. **A float mid/side file.** Float reconstruction is untested against real data.
 3. **A reference WAV for `24-bit-stereo.ncw`.** It decodes, but its test can
    only check the sample count.
