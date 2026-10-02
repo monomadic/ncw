@@ -5,14 +5,14 @@
 <a href="https://docs.rs/ncw" rel="nofollow noopener noreferrer"><img src="https://img.shields.io/docsrs/ncw" alt="docs.rs"></a>
 </p>
 
-NCW (Native Instruments Compressed Wave) is the lossless audio container used by Kontakt libraries. It is essentially DPCM plus bit truncation, with optional mid/side stereo.
+NCW (Native Instruments Compressed Wave) is the lossless audio container used by Kontakt libraries. Audio is stored in blocks of 512 frames, each either delta coded at a reduced bit width or stored raw, with optional mid/side stereo.
 
 | Crate | What it is |
 |---|---|
 | [`crates/ncw`](crates/ncw) | Zero-dependency decoder and PCM16/24 writer library ([docs.rs](https://docs.rs/ncw)) |
-| [`crates/ncw-convert`](crates/ncw-convert) | NCW/WAV conversion and byte-identical template roundtrips |
+| [`crates/ncw-convert`](crates/ncw-convert) | Command-line NCW/WAV converter with byte-identical template roundtrips |
 
-Format notes, including what is known and what is still guessed, live in [FORMAT.md](FORMAT.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
+Format notes, including what is known, what is still open and what files would help, live in [FORMAT.md](FORMAT.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
@@ -22,11 +22,27 @@ ncw-convert sample.ncw          # decodes to sample.wav
 ncw-convert sample.wav          # encodes PCM16/24 to sample.ncw
 ```
 
-Library usage is documented in the [crate README](crates/ncw/README.md).
+Library usage is documented in the [crate README](crates/ncw/README.md), and every CLI option in the [ncw-convert README](crates/ncw-convert/README.md).
+
+## Decoding
+
+The decoder handles mono and stereo files as 16 and 24-bit PCM or 32-bit float, including mid/side blocks. It is verified sample-for-sample against the reference WAVs in `crates/ncw/tests/data`, and PCM16/24 decoding has been checked against Kontakt's own output on commercial library files that cannot be published. Float mid/side and a few block types have no real example yet; see [FORMAT.md](FORMAT.md#unknowns).
+
+## Writing and roundtrips
+
+```sh
+ncw-convert input.wav output.ncw
+ncw-convert roundtrip original.ncw rebuilt.ncw
+ncw-convert decoded.wav rebuilt.ncw --template original.ncw
+```
+
+Writing supports mono and stereo integer PCM16/24. Float, 8-bit and 32-bit input is refused. By default mid/side is used only where it is exactly representable and smaller; `--mode direct` disables it, and `--mode mid-side` forces it, failing if any left/right pair has an odd sum. No clipping or rounding is performed. Existing output files are never overwritten.
+
+Fresh encoding is deterministic and lossless, but it is this crate's own encoder: the bytes differ from what Native Instruments' tools produce. To reproduce an original file exactly, use template mode, which keeps the original's header, block widths, flags and padding and **rebuilds the audio itself from PCM**. Block widths 0 and 1 are never written, because their meaning is not understood. Validation against Kontakt is described in [WRITER_VALIDATION.md](WRITER_VALIDATION.md).
 
 ## Help wanted
 
-The decoder is verified sample-for-sample against the paired reference WAVs in `crates/ncw/tests/data`, and against Kontakt's own output on private commercial material. Several cases are still covered only by synthetic files, or not at all. The list of files that would help, and what each would settle, is in [FORMAT.md](FORMAT.md#wanted). The most useful is a mid/side encoded file that can be redistributed as a test fixture.
+Several parts of the format are covered only by synthetic tests, or not at all. The files that would help, and what each would settle, are listed in [FORMAT.md](FORMAT.md#wanted). The most useful is a mid/side encoded file that can be redistributed as a test fixture.
 
 ## Development
 
@@ -37,34 +53,8 @@ cargo fmt --all --check
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
 ```
 
-The minimum supported Rust version is 1.85 (edition 2024) and is checked in CI.
+The minimum supported Rust version is 1.85 (edition 2024) and is checked in CI. Release steps, including GitHub release binaries, are in [RELEASING.md](RELEASING.md).
 
 ## License
 
 Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
-
-## Writing and roundtrips
-
-```sh
-ncw-convert input.wav output.ncw
-ncw-convert roundtrip original.ncw rebuilt.ncw
-ncw-convert decoded.wav rebuilt.ncw --template original.ncw
-```
-
-Writing currently supports mono/stereo integer PCM16/24. Auto mode uses mid/side
-only when exactly representable and smaller. `--mode direct` disables it;
-`--mode mid-side` requires it and rejects opposite-parity channel samples.
-No clipping or rounding is performed. Output files must not already exist.
-
-Byte identity requires preserving choices WAV does not contain. Template mode
-retains headers, widths/flags, terminal deltas and padded samples, and **rebuilds
-active audio from PCM**. Fresh encoding is deterministic but does not reproduce
-all NI encoder choices. Float/8-bit/32-bit writing and one-bit delta semantics
-remain unsupported. See [CLI usage](crates/ncw-convert/README.md) and
-[validation/limits](WRITER_VALIDATION.md).
-
-## Release checks
-
-Run the development checks above and follow [RELEASING.md](RELEASING.md) to
-verify both publication archives. Publish `ncw` before `ncw-convert`, whose
-registry dependency must be available first.
